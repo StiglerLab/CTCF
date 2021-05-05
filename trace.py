@@ -273,11 +273,15 @@ class Trace:
         :return:
         """
         self.name = path.split('\\')[-1]
-        data = pd.read_csv(path, sep="\t")
-        self.dist = data.loc[:, f'{root}_Dist']
-        self.force = data.loc[:, f'{root}_F']
+        data = pd.read_csv(path, sep=",")
+        self.dist = data.loc[:, 'Distance']
+        self.force = data.loc[:, 'Force']
+        self.force_fix = data.loc[:,'Force_2']
+        self.force_mob = data.loc[:,'Force_1']
         self.force_err = self.force  # TODO: Where does this come from?; self.force as placeholder for now
-        self.stdev = data.loc[:, f'{root}_Stdev']
+        self.stdev = data.loc[:, 'Stdev']
+        self.stdev_mob = data.loc[:, 'Stdev_1']
+        self.stdev_fix = data.loc[:, 'Stdev_2']
 
     def plot(self, width=8, height=6, dpi=80):
         """
@@ -350,15 +354,7 @@ class Trace:
 
 if __name__ == "__main__":
     a = Trace()
-    data = pd.read_excel("simulated_nofilter.xlsx", engine='openpyxl')
-    a.force = data.Force
-    a.force_fix = data.Force_2
-    a.force_mob = data.Force_1
-    a.stdev = data.Stdev
-    a.stdev_fix = data.Stdev_2
-    a.stdev_mob = data.Stdev_1
-    a.ext_orig = data.Extension
-    a.dist = data.Distance
+    a.load_data('simulated_nofilter.csv', '')
     a.correct_dna()
 
 
