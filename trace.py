@@ -350,8 +350,16 @@ class Trace:
 
 if __name__ == "__main__":
     a = Trace()
-    a.load_data("C:/Users/kamp/Desktop/test/test.txt", "STEPPING")
-    print("Loaded")
+    data = pd.read_excel("simulated_nofilter.xlsx", engine='openpyxl')
+    a.force = data.Force
+    a.force_fix = data.Force_2
+    a.force_mob = data.Force_1
+    a.stdev = data.Stdev
+    a.stdev_fix = data.Stdev_2
+    a.stdev_mob = data.Stdev_1
+    a.ext_orig = data.Extension
+    a.dist = data.Distance
     a.correct_dna()
+
 
 
