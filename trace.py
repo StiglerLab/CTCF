@@ -225,7 +225,7 @@ class Trace:
         plt.plot(sigma.index, yw)
      #   plt.ylim(0, 5)
         plt.draw()
-        plt.savefig(f"C:/users/kamp/Desktop/temp/{self.fit_counter}.png")
+        # plt.savefig(f"C:/users/kamp/Desktop/temp/{self.fit_counter}.png")
         plt.pause(0.001)
         print(beta_dagger1, beta_dagger2, k_dagger1, k_dagger2, width1, width2)
         print(k1_app * k_dagger1)
