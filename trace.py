@@ -23,6 +23,7 @@ FILTER_DICT = {'QPD': psd_filter.qpd,
                'Sub': psd_filter.psd_subsample}
 
 
+
 class Trace:
     def __init__(self):
         self.name = ""  # Used as an identifier in print statements
@@ -154,28 +155,28 @@ class Trace:
         plt.show()
         plt.pause(0.0001)
         fmodel = Model(self.fit_sigma_filter)
-        params = fmodel.make_params(beta_dagger1=self.beta_dagger1, beta_dagger2=self.beta_dagger2, k_dagger1=self.k_dagger1, k_dagger2=self.k_dagger2, width1=self.width1, width2=self.width2, k1_app=self.k1_app, k2_app=self.k2_app, bead=bead)
+        params = fmodel.make_params(beta_dagger1=np.log(self.beta_dagger1), beta_dagger2=np.log(self.beta_dagger2), k_dagger1=np.log(self.k_dagger1), k_dagger2=np.log(self.k_dagger2), width1=self.width1, width2=self.width2, k1_app=self.k1_app, k2_app=self.k2_app, bead=bead)
         params['k1_app'].vary = False
         params['k2_app'].vary = False
         params['bead'].vary = False
-        params['beta_dagger1'].min = 0.5
-        params['beta_dagger2'].max = 2
-        params['beta_dagger2'].min = 0.5
-        params['beta_dagger2'].max = 2
-        params['k_dagger1'].min = 0.5
-        params['k_dagger1'].max = 2
-        params['k_dagger2'].min = 0.5
-        params['k_dagger2'].max = 2
+       # params['beta_dagger1'].min = 0.5
+       # params['beta_dagger1'].max = 2
+       # params['beta_dagger2'].min = 0.5
+       # params['beta_dagger2'].max = 2
+       # params['k_dagger1'].min = 0.5
+       # params['k_dagger1'].max = 2
+       # params['k_dagger2'].min = 0.5
+       # params['k_dagger2'].max = 2
         params['width1'].min = 300
         params['width1'].max = 5000
         params['width2'].min = 300
         params['width2'].max = 5000
 
         result = fmodel.fit(y, params, x=x)
-        self.beta_dagger1 = result.params['beta_dagger1'].value
-        self.beta_dagger2 = result.params['beta_dagger2'].value
-        self.k_dagger1 = result.params['k_dagger1'].value
-        self.k_dagger2 = result.params['k_dagger2'].value
+        self.beta_dagger1 = 10**result.params['beta_dagger1'].value
+        self.beta_dagger2 = 10**result.params['beta_dagger2'].value
+        self.k_dagger1 = 10**result.params['k_dagger1'].value
+        self.k_dagger2 = 10**result.params['k_dagger2'].value
         self.width1 = result.params['width1'].value
         self.width2 = result.params['width2'].value
 
@@ -193,15 +194,16 @@ class Trace:
                                              self.beta_dagger2, self.k_dagger1, self.k_dagger2, self.width1,
                                              self.width2, bead, "")
         self.corrected = True
-        fig, axs = plt.subplots(2, 1, sharex=True)
-        axs[0] = plt.plot(self.dist, self.stdev)
-        axs[1] = plt.plot(self.dist[:-1], self.calc_sigma)
         plt.ioff()
         plt.show()
 
     def fit_sigma_filter(self, x, beta_dagger1, beta_dagger2, k_dagger1, k_dagger2, width1, width2, k1_app, k2_app,
                          bead):
         # figure this out
+        beta_dagger1 = 10**beta_dagger1
+        beta_dagger2 = 10**beta_dagger2
+        k_dagger1 = 10**k_dagger1
+        k_dagger2 = 10**k_dagger2
         if bead == 0:
             ext_std = self.stdev.copy()
             ext_force = self.force.copy()
@@ -266,24 +268,24 @@ class Trace:
             output[i] = delta_sigma
             return output
 
-    def load_data(self, path: str, root: str):
+    def load_from_csv(self, path: str,):
         """
         Method for loading in data. Format: .csv file with force as $root_F, distance as $root_Dist and Stdev as $root_Stdev
-        TODO: Can probably be removed in favor of custom loader functions defined by the user. Make a template loader for our data in loader.py
         :param path: filepath of .csv file
-        :param root: Root name for columns
-        :return:
         """
         self.name = path.split('\\')[-1]
         data = pd.read_csv(path, sep=",")
         self.dist = data.loc[:, 'Distance']
         self.force = data.loc[:, 'Force']
-        self.force_fix = data.loc[:,'Force_2']
-        self.force_mob = data.loc[:,'Force_1']
-        self.force_err = self.force  # TODO: Where does this come from?; self.force as placeholder for now
         self.stdev = data.loc[:, 'Stdev']
-        self.stdev_mob = data.loc[:, 'Stdev_1']
-        self.stdev_fix = data.loc[:, 'Stdev_2']
+        self.force_err = self.force  # TODO: Where does this come from?; self.force as placeholder for now
+        try:  # Trap specific values are optional, this skips loading them if they aren't present
+            self.force_mob = data.loc[:, 'Force_1']
+            self.force_fix = data.loc[:, 'Force_2']
+            self.stdev_mob = data.loc[:, 'Stdev_1']
+            self.stdev_fix = data.loc[:, 'Stdev_2']
+        except KeyError:
+            pass
 
     def plot(self, width=8, height=6, dpi=80):
         """
@@ -292,7 +294,6 @@ class Trace:
         :param height: height of figure in inches
         :param dpi: resolution of figure
         """
-        # TODO: add optional path for exporting figure
         if self.corrected:
             fig, axs = plt.subplots(2, 3, sharex='col', gridspec_kw=dict(height_ratios=[3, 1], hspace=0))
             axs[0, 0].plot(self.dist, self.force, color="red")
@@ -335,8 +336,6 @@ class Trace:
         # fig.tight_layout()
         plt.show()
 
-
-
     # Redefine __repr__ and __str__ methods
     def __repr__(self):
         return f'Trace {self.name} ({len(self.force)} rows):\n{self.force} '
@@ -356,7 +355,7 @@ class Trace:
 
 if __name__ == "__main__":
     a = Trace()
-    a.load_data('simulated_nofilter.csv', '')
+    a.load_from_csv('simulated_nofilter.csv')
     a.correct_dna()
 
 
