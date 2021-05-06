@@ -37,8 +37,8 @@ class Trace:
         self.bead_diameter = DIAM_BEAD  # Diameter of beads in µm used for tethering
         self.bead_diameter1 = DIAM_BEAD  # Diameter of bead in immobile trap in µm
         self.bead_diameter2 = DIAM_BEAD  # Diameter of bead in mobile trap in µm
-        self.k_fixed = 1  # Spring constant of the immobile trap
-        self.k_mobile = 1  # Spring constant of mobile trap
+        self.k_fixed = .3  # Spring constant of the immobile trap
+        self.k_mobile = .3  # Spring constant of mobile trap
         self.k1_app = self.k_mobile  # I think
         self.k2_app = self.k_fixed  # I think
         self.kc_app = 1 / (1 / self.k1_app + 1 / self.k2_app)  # Apparent k/s
@@ -158,24 +158,26 @@ class Trace:
         params['k1_app'].vary = False
         params['k2_app'].vary = False
         params['bead'].vary = False
-        params['beta_dagger1'].min = 0
-     #   params['beta_dagger2'].max = 2
-        params['beta_dagger2'].min = 0
-     #   params['beta_dagger2'].max = 2
-        params['k_dagger1'].min = 0
-     #   params['k_dagger1'].max = 2
-        params['k_dagger2'].min = 0
-    #    params['k_dagger2'].max = 2
-        params['width1'].min = 0
-        params['width1'].max = 10000
-        params['width2'].min = 0
-        params['width2'].max = 10000
+        params['beta_dagger1'].min = 0.5
+        params['beta_dagger2'].max = 2
+        params['beta_dagger2'].min = 0.5
+        params['beta_dagger2'].max = 2
+        params['k_dagger1'].min = 0.5
+        params['k_dagger1'].max = 2
+        params['k_dagger2'].min = 0.5
+        params['k_dagger2'].max = 2
+        params['width1'].min = 300
+        params['width1'].max = 5000
+        params['width2'].min = 300
+        params['width2'].max = 5000
 
         result = fmodel.fit(y, params, x=x)
         self.beta_dagger1 = result.params['beta_dagger1'].value
         self.beta_dagger2 = result.params['beta_dagger2'].value
         self.k_dagger1 = result.params['k_dagger1'].value
         self.k_dagger2 = result.params['k_dagger2'].value
+        self.width1 = result.params['width1'].value
+        self.width2 = result.params['width2'].value
 
         # Update self.k_dagger1, self.k_dagger2, self.beta_dagger1 and self.beta_dagger2 with fit values
         self.kc_app = 1 / (1 / self.k1_app + self.k2_app)
@@ -193,7 +195,7 @@ class Trace:
         self.corrected = True
         fig, axs = plt.subplots(2, 1, sharex=True)
         axs[0] = plt.plot(self.dist, self.stdev)
-        axs[1] = plt.plot(self.dist[:-1], self.sigma)
+        axs[1] = plt.plot(self.dist[:-1], self.calc_sigma)
         plt.ioff()
         plt.show()
 
