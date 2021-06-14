@@ -51,7 +51,7 @@ class Trace:
         self.beta_dagger = (self.beta_dagger1 * self.k2_app * self.k_dagger1 + self.beta_dagger2 * self.k1_app * self.k_dagger2)
         self.beta_dagger = self.beta_dagger / (self.k2_app * self.k_dagger1 + self.k1_app * self.k_dagger2)  # Miscalibration factor of the nm/V calibration
         self.calc_sigma = np.empty(1)  # Calculated noise
-        self.f_generate = 1000000  # not sure
+        self.f_generate = 5e7  # not sure
         self.f_bessel = 1  # Cutoff for bessel filter
         self.n_downsample = 1  # Downsampling factor of data
         self.n_boxcar = 1  # Window size of boxcar filter
@@ -161,18 +161,17 @@ class Trace:
         params['k1_app'].vary = False
         params['k2_app'].vary = False
         params['bead'].vary = False
-       # params['beta_dagger1'].min = 0.5
-       # params['beta_dagger1'].max = 2
-       # params['beta_dagger2'].min = 0.5
-       # params['beta_dagger2'].max = 2
-       # params['k_dagger1'].min = 0.5
-       # params['k_dagger1'].max = 2
-       # params['k_dagger2'].min = 0.5
-       # params['k_dagger2'].max = 2
+        params['beta_dagger1'].min = np.log(0.5)
+        params['beta_dagger1'].max = np.log(2)
+        params['beta_dagger2'].min = np.log(0.5)
+        params['beta_dagger2'].max = np.log(2)
+        params['k_dagger1'].min = np.log(0.5)
+        params['k_dagger2'].min = np.log(0.5)
+        params['k_dagger2'].max = np.log(2)
         params['width1'].min = 300
-        params['width1'].max = 5000
+        params['width1'].max = 4000
         params['width2'].min = 300
-        params['width2'].max = 5000
+        params['width2'].max = 4000
 
         result = fmodel.fit(y, params, x=x)
         self.beta_dagger1 = 10**result.params['beta_dagger1'].value
