@@ -106,6 +106,8 @@ class Trace:
                                                                                            beta_dagger1, beta_dagger2,
                                                                                            k_dagger1, k_dagger2, width1,
                                                                                            width2)
+        if np.isnan(defl_corr1).any():
+            return pd.DataFrame(data=np.array([1e7]*(len(defl_corr1)-1)))
         # TODO: fix the diff shortening somehow
         df_dx = np.diff(f_corr)/np.diff(ext_corr)
 
