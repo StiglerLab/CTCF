@@ -68,16 +68,17 @@ def bessel8(psd, parameters):
     f_cutoff = parameters['f_cutoff']
     f_mod = f_cutoff / 3.17962
     coefs_mag = psd.copy()
-    div = [coef/f_mod for coef in coefs_mag]
+    div = [coef/f_mod for coef in coefs_mag.index]
+    coefs = []
     for i in range(len(div)):
-        coefs_mag[i] = 2027025 / np.sqrt(81 * (-225225 * div[i] + 30030 * div[i] ** 3 - 770 *
-                                        div[i] ** 5 + 4 * div[i] ** 7) ** 2 + (
-                                              2027025 - 945945 * div[i] ** 2 + 51975 * div[i] ** 4 - 630 * div[i] ** 6 +
-                                             div[i] ** 8) ** 2)
-    for i, x in enumerate(coefs_mag):
-        if x == 0:
-            coefs_mag[i] = 1
-    psd_filtered = psd * coefs_mag ** 2
+        coefs.append(2027025 / np.sqrt(81 * (-225225 * div[i] + 30030 * div[i] ** 3 - 770 *
+                                             div[i] ** 5 + 4 * div[i] ** 7) ** 2 + (
+                                               2027025 - 945945 * div[i] ** 2 + 51975 * div[i] ** 4 - 630 * div[i] ** 6 +
+                                               div[i] ** 8) ** 2))
+
+    coefs_mag = [coef**2 for coef in coefs]
+    psd_filtered = psd.copy(deep=True)
+    psd_filtered.iloc[:, 0] *= coefs_mag
     return psd_filtered
 
 
