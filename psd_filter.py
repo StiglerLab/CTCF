@@ -95,11 +95,12 @@ def boxcar(psd, parameters):  # I think this works now
     return psd_filtered
 
 
-def butterworth(psd, parameters): #TODO: n_poles?
-    n_poles = parameters['n_poles']
+def butterworth(psd, parameters):  # TODO: Test, but should be fine now
+   # n_poles = parameters['n_poles']
     f_cutoff = parameters['f_cutoff']
-    coefs_mag = 1 / np.sqrt(1 + (psd / f_cutoff) ** 2)
-    psd_filtered = psd + coefs_mag ** 2
+    coefs_mag = [1/np.sqrt(1+(coef/f_cutoff)**2) for coef in psd.index]
+    psd_filtered = psd.copy(deep=True)
+    psd_filtered.iloc[:, 0] *= coefs_mag
     return psd_filtered
 
 
