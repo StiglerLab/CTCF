@@ -155,10 +155,15 @@ def psd_resample_down(psd, parameters):  # TODO: still small difference to Igor
     indices_new = np.linspace(psd.index[0], psd.index[-1], int(length/2)+1)
     rs_coefs_fft = pd.DataFrame(data=rs_coefs_fft, index=indices_new)
     # Interpolate rs_coefs_fft to allow lookup for coefs_mag
-    rs_coefs_fft_int = interpolate_psd(rs_coefs_fft, 2, len(rs_coefs_fft))
+    # TODO: This works but looks horrible; change interpolate_psd to get more convenient dataframe from that
+    rs_coefs_fft_int = interpolate_psd(rs_coefs_fft, factor, len(rs_coefs_fft))
+    rs_coefs_fft_int.index = rs_coefs_fft_int.iloc[:, 1]
+    coefs = []
     for coef in coefs_mag.index:
-        coefs_mag.iloc[coefs_mag.index.get_loc(coef, 'nearest')] = rs_coefs_fft_int.iloc[rs_coefs_fft_int.index.get_loc(coef, 'nearest')]
-    psd_filtered = psd*(coefs_mag**2)
+         coefs.append(rs_coefs_fft_int.iloc[rs_coefs_fft_int.index.get_loc(coef, 'nearest'), 0])
+    coefs = [coef**2 for coef in coefs]
+    psd_filtered = psd.copy(deep=True)
+    psd_filtered.iloc[:, 0] *= coefs
     return psd_filtered
 
 
