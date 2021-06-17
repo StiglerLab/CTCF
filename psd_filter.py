@@ -241,8 +241,7 @@ def psd_subsample(psd, n_downsample):
     psd0 = psd.copy(deep=True)
     psd0['f'] = psd.index
     psd0.index = range(len(psd))
-    # TODO: adjust interpolation
-    psd_interpol = psd.copy()
+    psd_interpol = psd.copy(deep=True)
     psd_ss = psd.copy(deep=True)
     n_0 = len(psd)
     psd_interpol = interpolate_psd(psd_interpol, n_downsample, n_0)
@@ -257,7 +256,7 @@ def psd_subsample(psd, n_downsample):
         for x in range(len(psd_ss)):
             signal[x] += psd_interpol.iat[f_start-x, 0]
     psd_ss[0] = signal
-    psd.index /= n_downsample
+    psd_ss.index /= n_downsample
     return psd_ss
 
 
