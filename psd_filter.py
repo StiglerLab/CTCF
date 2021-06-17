@@ -105,12 +105,11 @@ def butterworth(psd, parameters):  # TODO: Test, but should be fine now
 
 
 def qpd(psd, parameters):
-    psd_filtered = psd.copy(deep=True)
-    coefs_mag = psd.copy(deep=True)
     gam = 0.44
     f_0 = 11.1e3
-    coefs_mag = gam ** 2 + ((1 - gam ** 2) / (1 + (coefs_mag / f_0) ** 2))
-    psd_filtered = psd * coefs_mag
+    coefs_mag = [gam ** 2 + ((1 - gam ** 2) / (1 + (coef / f_0) ** 2)) for coef in psd.index]
+    psd_filtered = psd.copy(deep=True)
+    psd_filtered.iloc[:, 0] *= coefs_mag
     return psd_filtered
 
 
