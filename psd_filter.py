@@ -233,7 +233,84 @@ def psd_generate(k1, k2, k_d, f_sample_inf, beta_dagger1, beta_dagger2, mean_xi,
             print(f'Invalid bead: {bead}.')
             return -1
     else:  # Hansen, SM
-        pass
+        a1 = diam1/2
+        a2 = diam2/2
+        a = (a1+a2)/2
+        r = diam1 / 2 + diam2 / 2 + mean_xi
+        tau_a1 = a1 ** 2 / NU
+        tau_a2 = a2 ** 2 / NU
+        y = np.linspace(0, max_freq, n_pnts)
+        alpha1 = np.sqrt(-2*np.pi*y*tau_a1*np.complex(0,1))/a1
+        alpha2 = np.sqrt(-2*np.pi*y*tau_a2*np.complex(0,1))/a2
+        alpha = [(alpha1[i]+alpha2[i])/2 for i in range(len(alpha1))]
+        gamma1_self = [gamma_1 * (1 + alpha1[i]**2*a1**2/9) for i in range(len(alpha1))]
+        gamma2_self = [gamma_2 * (1 + alpha2[i]**2*a2**2/9) for i in range(len(alpha2))]
+        gamma_cross = [gamma_1 / ((3 * a) / (4 * r) * np.exp(-alpha[i] * r) * (
+            1 + 5 / 9 * alpha[i] ** 2 * a ** 2 + 1 / 6 * alpha[i] ** 3 * a ** 3) * 2 - (1 / 3 - 1) * (
+                                    a ** 3 / r ** 3 + 9 * a / (2 * alpha[i] ** 2 * r ** 3) - (
+                                    (5 * alpha[i] ** 2 * a ** 2 + 9) * (
+                                    alpha[i] ** 2 * r ** 2 + 2 * alpha[i] * r + 2) * a) / (
+                                            4 * alpha[i] ** 2 * r ** 3) * np.exp(-alpha[i] * r))) for i in range(len(alpha1))]
+
+        gamma_cross[0] = gamma_cross[1]
+        v_b = beta_dagger1*beta_dagger2
+        vgc = np.multiply(gamma1_self, gamma2_self)
+        if bead == 1:
+            for i in range(len(theor_psd)):
+                x = theor_psd[i]
+                theor_psd_calc.append(
+            2 * (2 * beta_dagger1 ** 2 * gamma_cross[i] * KT * (
+                        -2 * gamma_cross[i] ** 2 * vgc[i] * k_d * (k2 + k_d) + 2 * vgc[i] ** 2 * k_d * (k2 + k_d) - gamma_cross[i] * vgc[i] * (
+                            gamma2_self[i] * k_d ** 2 + gamma1_self[i] * (k2 + k_d) ** 2) + gamma_cross[i] ** 3 * (
+                                    gamma2_self[i] * k_d ** 2 + gamma1_self[i] * ((k2 + k_d) ** 2 + 4 * x ** 2 * gamma2_self[i] ** 2 * np.pi ** 2)))) / (
+                        vgc[i] ** 2 * (k2 * k_d + k1 * (k2 + k_d)) ** 2 - 16 * x ** 2 * gamma_cross[i] ** 3 * vgc[i] * k_d * (
+                            gamma2_self[i] * (k1 + k_d) + gamma1_self[i] * (k2 + k_d)) * np.pi ** 2 + 2 * gamma_cross[i] ** 2 * vgc[i] * (
+                                    -(k2 * k_d + k1 * (k2 + k_d)) ** 2 + 4 * x ** 2 * vgc[i] * (
+                                        k1 * (k2 + k_d) + k_d * (k2 + 2 * k_d)) * np.pi ** 2) + gamma_cross[i] ** 4 * (
+                                    (k2 * k_d + k1 * (k2 + k_d)) ** 2 + 4 * x ** 2 * (
+                                        2 * vgc[i] * k_d ** 2 + gamma2_self[i] ** 2 * (k1 + k_d) ** 2 + gamma1_self[i] ** 2 * (
+                                            k2 + k_d) ** 2) * np.pi ** 2 + 16 * x ** 4 * vgc[i] ** 2 * np.pi ** 4)))
+        elif bead == 2:
+            for i in range(len(theor_psd)):
+                x = theor_psd[i]
+                theor_psd_calc.append(
+                 2 * (2 * beta_dagger2 ** 2 * gamma_cross[i] * KT * (
+                            -2 * gamma_cross[i] ** 2 * vgc[i] * k_d * (k1 + k_d) + 2 * vgc[i] ** 2 * k_d * (k1 + k_d) - gamma_cross[i] * vgc[i] * (
+                                gamma1_self[i] * k_d ** 2 + gamma2_self[i] * (k1 + k_d) ** 2) + gamma_cross[i] ** 3 * (
+                                        gamma1_self[i] * k_d ** 2 + gamma2_self[i] * ((k1 + k_d) ** 2 + 4 * x ** 2 * gamma1_self[i] ** 2 * np.pi ** 2)))) / (
+                                               vgc[i] ** 2 * (
+                                                   k1 * k_d + k2 * (k1 + k_d)) ** 2 - 16 * x ** 2 * gamma_cross[i] ** 3 * vgc[i] * k_d * (
+                                                           gamma1_self[i] * (k2 + k_d) + gamma2_self[i] * (
+                                                               k1 + k_d)) * np.pi ** 2 + 2 * gamma_cross[i] ** 2 * vgc[i] * (
+                                                           -(k1 * k_d + k2 * (k1 + k_d)) ** 2 + 4 * x ** 2 * vgc[i] * (
+                                                               k2 * (k1 + k_d) + k_d * (
+                                                                   k1 + 2 * k_d)) * np.pi ** 2) + gamma_cross[i] ** 4 * (
+                                                           (k1 * k_d + k2 * (k1 + k_d)) ** 2 + 4 * x ** 2 * (
+                                                               2 * vgc[i] * k_d ** 2 + gamma1_self[i] ** 2 * (
+                                                                   k2 + k_d) ** 2 + gamma2_self[i] ** 2 * (
+                                                                           k1 + k_d) ** 2) * np.pi ** 2 + 16 * x ** 4 * vgc[i] ** 2 * np.pi ** 4)))
+        else:
+            for i in range(len(theor_psd)):
+                x = theor_psd[i]
+                theor_psd_calc.append(2 * (2 * gamma_cross[i] * KT * (-2 * v_b * (gamma_cross[i] **2 - vgc[i]) * (gamma_cross[i] * gamma2_self[i] * k_d * (k1 + k_d) - gamma1_self[i] * (
+                        gamma2_self[i] * k1 * (k2 + k_d) - gamma_cross[i] * k_d * (k2 + k_d) + gamma2_self[i] * k_d * (
+                        k2 + 2 * k_d))) - 8 * v_b * x ** 2 * gamma_cross[i] ** 2 * vgc[i][i] ** 2 * np.pi ** 2 + beta_dagger2 ** 2 * (
+                                                                              -2 * gamma_cross[i] ** 2 * vgc[i][i] * k_d * (k1 + k_d) + 2 * vgc[i][i] ** 2 * k_d * (
+                                                                              k1 + k_d) - gamma_cross[i] * vgc[i][i] * (
+                                                                                      gamma1_self[i] * k_d ** 2 + gamma2_self[i] * (k1 + k_d) ** 2) + gamma_cross[i] ** 3 * (
+                                                                                      gamma1_self[i] * k_d ** 2 + gamma2_self[i] * ((
+                                                                                                                                            k1 + k_d) ** 2 + 4 * x ** 2 * gamma1_self[i] ** 2 * np.pi ** 2))) + beta_dagger1 ** 2 * (
+                                                                              -2 * gamma_cross[i] ** 2 * vgc[i][i] * k_d * (k2 + k_d) + 2 * vgc[i][i] ** 2 * k_d * (
+                                                                              k2 + k_d) - gamma_cross[i] * vgc[i][i] * (
+                                                                                      gamma2_self[i] * k_d ** 2 + gamma1_self[i] * (k2 + k_d) ** 2) + gamma_cross[i] ** 3 * (
+                                                                                      gamma2_self[i] * k_d ** 2 + gamma1_self[i] * (
+                                                                                      (k2 + k_d) ** 2 + 4 * x ** 2 * gamma2_self[i] ** 2 * np.pi ** 2))))) / (
+                                              (gamma_cross[i] ** 2 - vgc[i][i]) ** 2 * (k2 * k_d + k1 * (k2 + k_d)) ** 2 + 4 * x ** 2 * gamma_cross[i] ** 2 * (
+                                              -4 * gamma_cross[i] * vgc[i][i] * k_d * (gamma2_self[i] * (k1 + k_d) + gamma1_self[i] * (k2 + k_d)) + gamma_cross[i] ** 2 * (
+                                              2 * vgc[i][i] * k_d ** 2 + gamma2_self[i] ** 2 * (k1 + k_d) ** 2 + gamma1_self[i] ** 2 * (
+                                              k2 + k_d) ** 2) + 2 * vgc[i][i] ** 2 * (k1 * (k2 + k_d) + k_d * (
+                                              k2 + 2 * k_d))) * np.pi ** 2 + 16 * x ** 4 * gamma_cross[i] ** 4 * vgc[i][i] ** 2 * np.pi ** 4))
+        theor_psd_calc = np.real(theor_psd_calc)
     return pd.DataFrame(data=theor_psd_calc, index=theor_psd)
 
 
