@@ -1,0 +1,6 @@
+numpy~=1.16.4
+pandas~=0.25.1
+setuptools~=41.6.0
+matplotlib~=3.2.1
+lmfit~=1.0.1
+scipy~=1.4.1
