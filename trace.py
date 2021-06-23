@@ -214,15 +214,15 @@ class Trace:
         beta_dagger2 = 10**beta_dagger2
         k_dagger1 = 10**k_dagger1
         k_dagger2 = 10**k_dagger2
-        if bead == 0:
-            ext_std = self.stdev.copy()
-            ext_force = self.force.copy()
-        elif bead == 1:
+        if bead == 1:
+            ext_std = self.stdev_mob.copy()
+            ext_force = self.force_mob.copy()
+        elif bead == 2:
             ext_std = self.stdev_fix.copy()
             ext_force = self.force_fix.copy()
         else:
-            ext_std = self.stdev_mob.copy()
-            ext_force = self.force_mob.copy()
+            ext_std = self.stdev.copy()
+            ext_force = self.force.copy()
         sigma = self.calc_theor_sigma_var_kc(ext_force, x, k1_app, k2_app, beta_dagger1, beta_dagger2, k_dagger1,
                                              k_dagger2, width1=width1, width2=width2, bead=bead, filter_string="")
         sigma_wo_mask = sigma.copy()
@@ -230,9 +230,9 @@ class Trace:
         sigma_wo_mask = np.array(sigma_wo_mask)
         sigma_wo_mask = sigma_wo_mask[~np.isnan(sigma_wo_mask)]  # remove nan
         if len(sigma_wo_mask) == len(sigma):
-            yw = sigma_wo_mask.copy()  # TODO: ?
+            yw = sigma_wo_mask.copy()
         else:
-            yw = sigma.copy()  # TODO: ?
+            yw = sigma.copy()
         # return fitted sigma as yw
         plt.clf()
         plt.plot(self.dist, self.stdev)
