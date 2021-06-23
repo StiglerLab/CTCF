@@ -151,9 +151,6 @@ class Trace:
         kdagger = (self.k_dagger1 / self.k1_app + self.k_dagger2 / self.k2_app) / (1 / kc_app)
         beta_dagger = np.divide(self.beta_dagger1 * self.k2_app * self.k_dagger1 + self.beta_dagger2 * self.k1_app * self.k_dagger2,
                               self.k2_app * self.k_dagger1 + self.k1_app * self.k_dagger2)
-        self.force_err = np.repeat(0.05, len(self.force))  # Make force_err same length as force and set each point of force_err to 0.05
-        propagation = self.propagate_force_error_to_sigma()
-        # TODO: Change to adapt to bead modes, for now keep bead at 0
         x = self.dist.copy(deep=True)
         if bead == 1:  # set stdev according to bead mode
             y = self.stdev_mob[:-1]
@@ -247,36 +244,6 @@ class Trace:
         print(self.fit_counter)
         return yw
 
-    def propagate_force_error_to_sigma(self):  # TODO: Is this actually used for anything?
-        output = np.zeros(len(self.force))
-        for i in range(len(output)):
-            if i < len(output) - 1:
-                f_plus = self.force[i + 1]
-                f_plus_err = self.force_err[i + 1]
-                dist_plus = self.dist[i + 1]
-            else:
-                f_plus = self.force[len(output) - 1]
-                f_plus_err = self.force_err[len(output) - 1]
-                dist_plus = self.dist[len(output) - 1]
-            if i >= 1:
-                f_minus = self.force[i - 1]
-                f_minus_err = self.force_err[i - 1]
-                dist_minus = self.dist[i - 1]
-            else:
-                f_minus = self.force[0]
-                f_minus_err = self.force_err[0]
-                dist_minus = self.dist[0]
-            k_linker = (f_plus - f_minus) / (
-                    dist_plus - dist_minus + (f_minus - f_plus) / (self.kc_app * self.beta_dagger))
-            sigma = np.sqrt(KT / ((self.kc_app / self.k_dagger + k_linker) * (1 / self.beta_dagger ** 2)))
-            partial_linker = (dist_plus - dist_minus) / (
-                    dist_plus - dist_minus + (f_minus - f_plus) / (self.kc_app * self.beta_dagger)) ** 2
-            delta_linker = np.sqrt(partial_linker ** 2 * f_plus_err ** 2 + partial_linker ** 2 * f_minus_err ** 2)
-            partial_sigma = 1 / (2 * sigma) * KT / (self.beta_dagger * self.k_dagger) * 1 / self.beta_dagger ** 2 * (
-                    -1 / (self.kc_app / self.k_dagger + k_linker) ** 2)
-            delta_sigma = np.sqrt(partial_sigma ** 2 * delta_linker ** 2)
-            output[i] = delta_sigma
-            return output
 
     def load_from_csv(self, path: str,):
         """
