@@ -82,7 +82,6 @@ class Trace:
         """
         Calculates theoretical sigma as part of the fitting routine.
         PSD generation and application of filters is multithreaded.
-        TODO: Multithread seems to create long wait times, maybe shift this for performance gains
         :param force: Force data
         :param dist:  Distance data
         :param k1_app: Apparent (incorrect) k for trap 1
@@ -137,12 +136,17 @@ class Trace:
         Calls fit_sigma_filter method for correction.
         """
         bead = self.bead
-        # TODO: set force according to bead mode
+        if bead == 1:
+            force = self.force_mob
+        elif bead == 2:
+            force = self.force_fix
+        else:
+            force = self.force
         self.parameters = psd_filter.make_filter_params(self.db447x, self.n_downsample, 4096, 1, self.f_bessel,
                                                         self.n_boxcar, self.n_resampledown)
-        if len(self.force) == 1 or len(self.dist) == 1:
+        if len(force) == 1 or len(self.dist) == 1:
             raise Exception("No force extension curve")
-        sigma = self.calc_theor_sigma_var_kc(self.force, self.dist, self.k1_app, self.k2_app, self.beta_dagger1, self.beta_dagger2, self.k_dagger1, self.k_dagger2, self.width1, self.width2, bead, "")
+        sigma = self.calc_theor_sigma_var_kc(force, self.dist, self.k1_app, self.k2_app, self.beta_dagger1, self.beta_dagger2, self.k_dagger1, self.k_dagger2, self.width1, self.width2, bead, "")
         kc_app = 1 / (1 / self.k1_app + 1 / self.k2_app)
         kdagger = (self.k_dagger1 / self.k1_app + self.k_dagger2 / self.k2_app) / (1 / kc_app)
         beta_dagger = np.divide(self.beta_dagger1 * self.k2_app * self.k_dagger1 + self.beta_dagger2 * self.k1_app * self.k_dagger2,
@@ -151,11 +155,16 @@ class Trace:
         propagation = self.propagate_force_error_to_sigma()
         # TODO: Change to adapt to bead modes, for now keep bead at 0
         x = self.dist.copy(deep=True)
-        y = self.stdev[:-1]
-        plt.plot(self.dist, self.stdev)
-        plt.ion()
-        plt.show()
-        plt.pause(0.0001)
+        if bead == 1:  # set stdev according to bead mode
+            y = self.stdev_mob[:-1]
+        elif bead == 2:
+            y = self.stdev_fix[:-1]
+        else:
+            y = self.stdev[:-1]
+      #  plt.plot(self.dist, self.stdev)
+     #  plt.ion()
+      #  plt.show()
+      #  plt.pause(0.0001)
         fmodel = Model(self.fit_sigma_filter)
         params = fmodel.make_params(beta_dagger1=np.log(self.beta_dagger1), beta_dagger2=np.log(self.beta_dagger2), k_dagger1=np.log(self.k_dagger1), k_dagger2=np.log(self.k_dagger2), width1=self.width1, width2=self.width2, k1_app=self.k1_app, k2_app=self.k2_app, bead=bead)
         params['k1_app'].vary = False
