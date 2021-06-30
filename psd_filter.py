@@ -8,6 +8,22 @@ ETA = 0.89e-9
 RHO = 0.99823e-21  # Water
 NU = ETA / RHO  # kinematic viscosity
 
+filter_params = {
+    "ni447x": "db447x",
+    "bessel8": "f_cutoff",
+    "boxcar": "n_avg",
+    "butterworth": "f_cutoff",
+    "psd_resample_down": "factor",
+    "psd_subsample": "n_downsample",
+    "sample": "n_downsample",  # alias for psd_subsample
+    "ss": "n_downsample"  # alias for psd_subsample
+}
+
+
+
+
+
+
 
 def load_db477x() -> pd.core.frame.DataFrame:  # Load filter data for NI447x filter
     return pd.read_csv("dB447x.txt", sep="\t", index_col=0, header=None, names=None)  # ni447x filter
@@ -159,7 +175,7 @@ def psd_resample_down(psd, parameters):
     indices_new = np.linspace(psd.index[0], psd.index[-1], int(length / 2) + 1)
     rs_coefs_fft = pd.DataFrame(data=rs_coefs_fft, index=indices_new)
     # Interpolate rs_coefs_fft to allow lookup for coefs_mag
-    # TODO: This works but looks horrible; change interpolate_psd to get more convenient dataframe from that
+    # TODO: This works but looks horrible
     rs_coefs_fft_int = interpolate_psd(rs_coefs_fft, factor, len(rs_coefs_fft))
     rs_coefs_fft_int.index = rs_coefs_fft_int.iloc[:, 1]
     coefs = []
@@ -468,6 +484,20 @@ def psd_subsample(psd, parameters):  # TODO: compare exact numbers to IGOR, othe
     psd_ss[0] = signal
     psd_ss.index /= n_downsample
     return psd_ss
+
+
+def read_filter(filter_string):
+    filter_list = filter_string.lower().split(";")
+    filters = [x.split(',')[0] for x in filter_list]
+    paramaters = [x.split(',')[1] for x in filter_list]
+    param_dict = {}
+    for i, filter in enumerate(filters):
+        (filter_params[filter])
+        param_dict[filter_params[filter]] = paramaters[i]
+    return ";".join(filters), param_dict
+
+
+
 
 
 if __name__ == '__main__':
