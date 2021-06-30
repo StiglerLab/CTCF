@@ -87,9 +87,10 @@ class Trace:
         self.width1 = 800
         self.width2 = 800
         self.fit_counter = 0  # Keep track of fit iterations
-        self.db447x = psd_filter.load_db477x()
-        self.bead = 0
-        self.parameters = []
+        self.db447x = psd_filter.load_db477x()  # Filter values for NI DB447x filter
+        self.bead = 0  # Bead selection
+        self.parameters = []  # Dictionary for filter parameters
+        self.plot = False  # Toggle plotting of fit progress
 
     def calc_theor_sigma_var_kc(self, force, dist, k1_app, k2_app, beta_dagger1, beta_dagger2, k_dagger1, k_dagger2,
                                 width1, width2, bead, filter_string):
@@ -166,8 +167,8 @@ class Trace:
             raise Exception("No force extension curve")
         sigma = self.calc_theor_sigma_var_kc(force, self.dist, self.k1_app, self.k2_app, self.beta_dagger1, self.beta_dagger2, self.k_dagger1, self.k_dagger2, self.width1, self.width2, bead, "")
         kc_app = 1 / (1 / self.k1_app + 1 / self.k2_app)
-        kdagger = (self.k_dagger1 / self.k1_app + self.k_dagger2 / self.k2_app) / (1 / kc_app)
-        beta_dagger = np.divide(self.beta_dagger1 * self.k2_app * self.k_dagger1 + self.beta_dagger2 * self.k1_app * self.k_dagger2,
+        self.k_dagger = (self.k_dagger1 / self.k1_app + self.k_dagger2 / self.k2_app) / (1 / kc_app)
+        self.beta_dagger = np.divide(self.beta_dagger1 * self.k2_app * self.k_dagger1 + self.beta_dagger2 * self.k1_app * self.k_dagger2,
                               self.k2_app * self.k_dagger1 + self.k1_app * self.k_dagger2)
         x = self.dist.copy(deep=True)
         if bead == 1:  # set stdev according to bead mode
@@ -176,10 +177,12 @@ class Trace:
             y = self.stdev_fix[:-1]
         else:
             y = self.stdev[:-1]
-      #  plt.plot(self.dist, self.stdev)
-     #  plt.ion()
-      #  plt.show()
-      #  plt.pause(0.0001)
+        if self.plot:
+            plt.plot(self.dist, self.stdev)
+            plt.ion()
+            plt.show()
+            plt.pause(0.0001)
+
         fmodel = Model(self.fit_sigma_filter)
         params = fmodel.make_params(beta_dagger1=np.log(self.beta_dagger1), beta_dagger2=np.log(self.beta_dagger2), k_dagger1=np.log(self.k_dagger1), k_dagger2=np.log(self.k_dagger2), width1=self.width1, width2=self.width2, k1_app=self.k1_app, k2_app=self.k2_app, bead=bead)
         params['k1_app'].vary = False
@@ -219,8 +222,9 @@ class Trace:
                                              self.beta_dagger2, self.k_dagger1, self.k_dagger2, self.width1,
                                              self.width2, bead, "")
         self.corrected = True
-        plt.ioff()
-        plt.show()
+        if self.plot:
+            plt.ioff()
+            plt.show()
 
     def fit_sigma_filter(self, x, beta_dagger1, beta_dagger2, k_dagger1, k_dagger2, width1, width2, k1_app, k2_app,
                          bead):
@@ -249,21 +253,12 @@ class Trace:
             yw = sigma.copy()
         # return fitted sigma as yw
         # Plot for visualisation; can be removed for performance gains
-        plt.clf()
-        plt.plot(self.dist, self.stdev)
-        plt.plot(sigma.index, yw)
-      #  plt.ylim(0, 6)
-      #  plt.xlim(100, 750)
-       # plt.text(110, 0.07, f"beta_dagger1: {beta_dagger1}\n"
-       ###                     f"beta_dagger2: {beta_dagger2}\n"
-       #                     f"k_dagger1: {k_dagger1}\n"
-       #                     f"k_dagger2: {k_dagger2}\n"
-       #                     f"width1: {width1}\n"
-       #                     f"width2: {width2}")
-      #  plt.text(700, 4, self.fit_counter)
-        plt.draw()
-       # plt.savefig(f"C:/users/kamp/Desktop/temp/{self.fit_counter:03}.png")
-        plt.pause(0.001)
+        if self.plot:
+            plt.clf()
+            plt.plot(x, y)
+            plt.plot(sigma.index, yw)
+            plt.draw()
+            plt.pause(0.001)
         print(beta_dagger1, beta_dagger2, k_dagger1, k_dagger2, width1, width2)
         print(k1_app * k_dagger1)
         print(self.fit_counter)
