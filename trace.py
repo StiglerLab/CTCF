@@ -340,14 +340,50 @@ class Trace:
             ret_string = f"Corrected " + ret_string
         return ret_string
 
-    def set_mask(self, mask):
-        self.mask = mask
+
+def correction(filename: str, k1_app: float, k2_app: float, filters: str = "", sheet: str = ""):
+    """
+    Loads data, parses filter and runs correction
+    :param filename:  File that contains data to be corrected; allowed extensions: *.csv, *.xlsx
+    :param k1_app: Apparent stiffness of trap 1
+    :param k2_app; Apparent stiffness of trap 2
+    :param sheet: Optional sheetname argument in case multi-sheet .xlsx file is used
+    :param filters: String of filters and related parameters
+    :return: Corrected trace object
+    """
+    #  Load data and store in Trace object
+    if filename.endswith(".csv"):
+        data = pd.read_csv(filename)
+    elif filename.endswith(".xlsx"):
+        if len(sheet) != 0:
+            data = pd.read_excel(filename, sheet_name=sheet, engine='openpyxl')
+        else:
+            data = pd.read_excel(filename, engine='openpyxl')
+    else:
+        print("File format not supported. Please convert data to .csv or .xlsx.")
+        return -1
+    trace = Trace()
+    trace.k1_app = k1_app
+    trace.k2_app = k2_app
+    trace.force = data.iloc[:, 0]
+    trace.force_fix = data.iloc[:, 5]
+    trace.force_mob = data.iloc[:, 6]
+    trace.stdev = data.iloc[:, 1]
+    trace.stdev_fix = data.iloc[:, 7]
+    trace.stdev_mob = data.iloc[:, 8]
+    trace.ext_orig = data.iloc[:, 3]
+    trace.dist = data.iloc[:, 4]
+    # Parse filters
+    trace.filters, trace.parameters = psd_filter.read_filter(filters)
+    # Correct
+    print("start correction")
+    trace.correct()
+    return trace
 
 
 if __name__ == "__main__":
     a = Trace()
     a.load_from_csv('simulated_nofilter.csv')
-    a.correct_dna()
-
+    a.correct()
 
 
