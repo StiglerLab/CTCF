@@ -1,6 +1,5 @@
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
 
 # Set global constants
 KT = 1.38e-2 * 298
@@ -49,7 +48,7 @@ def ni447x(psd, parameters):
     # Filters input PSD using NI-447x filter
     db447x = parameters["db447x"]
     coefs_mag = psd.copy(deep=True)  # !
-    for x, val in psd.iterrows():  # TODO: this can probably be sped up
+    for x, val in psd.iterrows():
         if x < db447x.index[0]:
             coefs_mag.iloc[coefs_mag.index.get_loc(x, method='nearest')] = 1  # fancy lookup for float indices
         elif x > db447x.index[-1]:
@@ -82,7 +81,7 @@ def bessel8(psd, parameters):
     return psd_filtered
 
 
-def boxcar(psd, parameters):  # TODO: seems to work but compare with IGOR; might also create NaNs maybe
+def boxcar(psd, parameters):
     n_avg = parameters['n_avg']
     psd_filtered = psd.copy(deep=True)
     coefs_mag = psd.copy(deep=True)
@@ -94,13 +93,12 @@ def boxcar(psd, parameters):  # TODO: seems to work but compare with IGOR; might
         except FloatingPointError:  # To deal with case x = 0
             pass
     coefs_mag.iloc[coefs_mag.index.get_loc(coefs_mag.index[0], method='nearest')] = 1
-    psd_filtered = psd * coefs_mag ** 2  # TODO: rewrite as in bessel8 or maybe not; seems to work ok
+    psd_filtered = psd * coefs_mag ** 2
     print(psd_filtered)
     return psd_filtered
 
 
-def butterworth(psd, parameters):  # TODO: Test, but should be fine now
-    # n_poles = parameters['n_poles']
+def butterworth(psd, parameters):
     f_cutoff = parameters['f_cutoff']
     coefs_mag = [1 / np.sqrt(1 + (coef / f_cutoff) ** 2) for coef in psd.index]
     psd_filtered = psd.copy(deep=True)
@@ -120,7 +118,6 @@ def qpd(psd, parameters):
 def interpolate_psd(psd, n_downsample: int, n_0: int):
     """
     Helper function for psd_subsample()
-    :return:
     """
     # Make placeholders
     indices = [np.NaN] * ((n_0 * n_downsample) - n_downsample + 1)
@@ -469,9 +466,3 @@ def psd_subsample(psd, parameters):  # TODO: compare exact numbers to IGOR, othe
     return psd_ss
 
 
-
-
-if __name__ == '__main__':
-    #psd1 = psd_generate(0.9958863333266993, 0.9958863333266993, 0.1776581135500805, 100000, 0.9958863333266993,
-     #                   0.9958863333266993, 467.9337734050282,bead=1)
-    pass
