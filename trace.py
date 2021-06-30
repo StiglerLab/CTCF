@@ -5,7 +5,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 from lmfit import Model
 import multiprocessing as mp
-# import cProfile  # TODO: For profiling, remove when done
+#import cProfile  # TODO: For profiling, remove when done
+
+# TODO: Check bead modes (is 1 mobile?)
 
 KT = 1.38 * 10e-2 * 296
 ETA = 1e-9  # Water
@@ -13,15 +15,15 @@ D = 1000
 DIAM_BEAD = 4360
 
 # Dictionary for parsing filters; append keys and filter functions to add custom filters
-FILTER_DICT = {'QPD': psd_filter.qpd,
-               'Bessel8': psd_filter.bessel8,
-               'Butterworth': psd_filter.butterworth,
-               'Sample': psd_filter.psd_subsample,
-               'Boxcar': psd_filter.boxcar,
-               'IGORresample': psd_filter.psd_resample_down,
-               'NI447x': psd_filter.ni447x,
-               'Sub': psd_filter.psd_subsample}
-
+FILTER_DICT = {'qpd': psd_filter.qpd,
+               'bessel8': psd_filter.bessel8,
+               'butterworth': psd_filter.butterworth,
+               'sample': psd_filter.psd_subsample,
+               'boxcar': psd_filter.boxcar,
+               'igorresample': psd_filter.psd_resample_down,
+               'ni447x': psd_filter.ni447x,
+               'sub': psd_filter.psd_subsample,
+               "ss": psd_filter.psd_subsample}
 
 
 class Trace:
@@ -128,9 +130,11 @@ class Trace:
         self.ext_corr = ext_corr.copy()
         self.calc_sigma = calc_sigma
         dist_temp = dist.copy()
+        if np.isnan(calc_sigma).any():  # heavy penalisation if NaNs are generated; prevents abort by Fit Error
+            return pd.DataFrame(data=np.array([1e7]*(len(defl_corr1)-1)))
         return pd.DataFrame(data=calc_sigma, index=dist_temp[:-1])
 
-    def correct_dna(self):
+    def correct(self):
         """
         Main method that's called for correction of miscalibration after data loading.
         Calls fit_sigma_filter method for correction.
@@ -142,8 +146,10 @@ class Trace:
             force = self.force_fix
         else:
             force = self.force
-        self.parameters = psd_filter.make_filter_params(self.db447x, self.n_downsample, 4096, 1, self.f_bessel,
-                                                        self.n_boxcar, self.n_resampledown)
+        if not self.parameters:
+            self.parameters = psd_filter.make_filter_params(self.db447x, self.n_downsample, 4096, 1, self.f_bessel,
+                                                                self.n_boxcar, self.n_resampledown)
+            print("Setting parameters")
         if len(force) == 1 or len(self.dist) == 1:
             raise Exception("No force extension curve")
         sigma = self.calc_theor_sigma_var_kc(force, self.dist, self.k1_app, self.k2_app, self.beta_dagger1, self.beta_dagger2, self.k_dagger1, self.k_dagger2, self.width1, self.width2, bead, "")
@@ -206,7 +212,6 @@ class Trace:
 
     def fit_sigma_filter(self, x, beta_dagger1, beta_dagger2, k_dagger1, k_dagger2, width1, width2, k1_app, k2_app,
                          bead):
-        # figure this out
         beta_dagger1 = 10**beta_dagger1
         beta_dagger2 = 10**beta_dagger2
         k_dagger1 = 10**k_dagger1
@@ -231,17 +236,26 @@ class Trace:
         else:
             yw = sigma.copy()
         # return fitted sigma as yw
+        # Plot for visualisation; can be removed for performance gains
         plt.clf()
         plt.plot(self.dist, self.stdev)
         plt.plot(sigma.index, yw)
-     #   plt.ylim(0, 5)
+      #  plt.ylim(0, 6)
+      #  plt.xlim(100, 750)
+       # plt.text(110, 0.07, f"beta_dagger1: {beta_dagger1}\n"
+       ###                     f"beta_dagger2: {beta_dagger2}\n"
+       #                     f"k_dagger1: {k_dagger1}\n"
+       #                     f"k_dagger2: {k_dagger2}\n"
+       #                     f"width1: {width1}\n"
+       #                     f"width2: {width2}")
+      #  plt.text(700, 4, self.fit_counter)
         plt.draw()
-        # plt.savefig(f"C:/users/kamp/Desktop/temp/{self.fit_counter}.png")
+       # plt.savefig(f"C:/users/kamp/Desktop/temp/{self.fit_counter:03}.png")
         plt.pause(0.001)
         print(beta_dagger1, beta_dagger2, k_dagger1, k_dagger2, width1, width2)
         print(k1_app * k_dagger1)
-        self.fit_counter += 1
         print(self.fit_counter)
+        self.fit_counter += 1
         return yw
 
 
