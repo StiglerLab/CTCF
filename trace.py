@@ -24,6 +24,18 @@ FILTER_DICT = {'qpd': psd_filter.qpd,
                'ni447x': psd_filter.ni447x,
                'sub': psd_filter.psd_subsample,
                "ss": psd_filter.psd_subsample}
+# Dictionary for assigning filter parameters to the right key when using read_filter()
+filter_params = {
+    "ni447x": "db447x",
+    "bessel8": "f_cutoff",
+    "boxcar": "n_avg",
+    "butterworth": "f_cutoff",
+    "psd_resample_down": "factor",
+    "psd_subsample": "n_downsample",
+    "sample": "n_downsample",  # alias for psd_subsample
+    "ss": "n_downsample"  # alias for psd_subsample
+}
+
 
 
 class Trace:
@@ -326,6 +338,16 @@ class Trace:
             # axs[1].set_title("Standard deviation of force signal")
         # fig.tight_layout()
         plt.show()
+
+    def read_filter(self, filter_string: str):
+        filter_list = filter_string.lower().split(";")
+        filters = [x.split(',')[0] for x in filter_list]
+        parameters = [x.split(',')[1] for x in filter_list]
+        param_dict = {}
+        for i, filter in enumerate(filters):
+            param_dict[filter_params[filter]] = parameters[i]
+        self.filters = ';'.join(filters)
+        self.parameters = param_dict
 
     # Redefine __repr__ and __str__ methods
     def __repr__(self):

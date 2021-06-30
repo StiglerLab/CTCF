@@ -8,22 +8,6 @@ ETA = 0.89e-9
 RHO = 0.99823e-21  # Water
 NU = ETA / RHO  # kinematic viscosity
 
-filter_params = {
-    "ni447x": "db447x",
-    "bessel8": "f_cutoff",
-    "boxcar": "n_avg",
-    "butterworth": "f_cutoff",
-    "psd_resample_down": "factor",
-    "psd_subsample": "n_downsample",
-    "sample": "n_downsample",  # alias for psd_subsample
-    "ss": "n_downsample"  # alias for psd_subsample
-}
-
-
-
-
-
-
 
 def load_db477x() -> pd.core.frame.DataFrame:  # Load filter data for NI447x filter
     return pd.read_csv("dB447x.txt", sep="\t", index_col=0, header=None, names=None)  # ni447x filter
@@ -161,7 +145,6 @@ def interpolate_psd(psd, n_downsample: int, n_0: int):
 
 def psd_resample_down(psd, parameters):
     factor = parameters['factor']
-
     coefs_mag = psd.copy(deep=True)
     max_freq = psd.index[-1]
     freq_sample = max_freq * 2
@@ -484,17 +467,6 @@ def psd_subsample(psd, parameters):  # TODO: compare exact numbers to IGOR, othe
     psd_ss[0] = signal
     psd_ss.index /= n_downsample
     return psd_ss
-
-
-def read_filter(filter_string):
-    filter_list = filter_string.lower().split(";")
-    filters = [x.split(',')[0] for x in filter_list]
-    parameters = [x.split(',')[1] for x in filter_list]
-    param_dict = {}
-    for i, filter in enumerate(filters):
-        param_dict[filter_params[filter]] = parameters[i]
-    return ";".join(filters), param_dict
-
 
 
 
