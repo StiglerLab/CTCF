@@ -396,7 +396,7 @@ def correction(filename: str, k1_app: float, k2_app: float, filters: str = "", s
     trace.ext_orig = data.iloc[:, 3]
     trace.dist = data.iloc[:, 4]
     # Parse filters
-    trace.filters, trace.parameters = psd_filter.read_filter(filters)
+    trace.read_filter(filters)
     # Correct
     print("start correction")
     trace.correct()
