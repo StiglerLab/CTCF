@@ -489,11 +489,10 @@ def psd_subsample(psd, parameters):  # TODO: compare exact numbers to IGOR, othe
 def read_filter(filter_string):
     filter_list = filter_string.lower().split(";")
     filters = [x.split(',')[0] for x in filter_list]
-    paramaters = [x.split(',')[1] for x in filter_list]
+    parameters = [x.split(',')[1] for x in filter_list]
     param_dict = {}
     for i, filter in enumerate(filters):
-        (filter_params[filter])
-        param_dict[filter_params[filter]] = paramaters[i]
+        param_dict[filter_params[filter]] = parameters[i]
     return ";".join(filters), param_dict
 
 
