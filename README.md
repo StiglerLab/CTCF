@@ -1,16 +1,12 @@
-# $nameofpackage
+# Correction of Tweezer Calibration Factors (CTCF)
 
-This package provides functions to correct miscalibration of optical tweezer measurements using the force noise signal.
+This code provides functions to correct miscalibration of optical tweezer measurements using the force noise signal.
 
-## Install (not yet possible)
-$nameofpackage can be installed using pip.
-
-```pip install $nameofpackage```
 
 ## Use
-The main class provided by $nameofpackage is Trace. It contains all data required for correction, which is performed using the correct() method.
+The main class provided by CTCF is Trace. It contains all data required for correction, which is performed using the correct() method.
 ```python
-from trace import Trace
+from CTCF import Trace
 example_trace = Trace()
 
 ##################################
@@ -40,13 +36,16 @@ Data is added to the Trace object by assigning it to the following attributes
 + parameters: dictionary of filter parameters
 
 
-By default the following filters are implemented.
-+ Bessel8
-+ Boxcar
-+ Butterworth
-+ QDP
-+ Subsample (sample, ss)
-+ NI447x
+By default the following filters are implemented in the psd_filter.py file.
+
+| Filter | Filter command | Parameter |
+| ------ | ------ | ------ |
+| Bessel filter (Order 8) | bessel8 | Cutoff frequency|
+| Boxcar filter | boxcar | averaging window size|
+| Butterworth filter | butterworth | Cutoff frequency|
+| Subsampling | subsample, sample, ss | Downsampling factor|
+| Response of quadrant photodiode | qpd | - |
+| Response of National Instruments NI 447x filter| ni447x | - |
 
 The filter_string contains the applied filters in order, as well as parameters relevant to the filter. The filters and parameters are separated by ",". 
 In the case of multiple applied filters ";" is used to separate the different filters. The read_filter() method reads the filter string into the Trace object.
@@ -65,10 +64,13 @@ The correction factors are stored in the Trace class attributes
 The correction function performs loading of data from a  .csv or .xlsx file, setting the attributes of a trace object and running the correct() method. The corrected trace object is then returned.
 
 ```python
-from Trace import correction
+from CTCF import correction
 corrected_trace = correction(filename, k1, k2, [filter_string, sheet_name])
 ```
 The correction function assumes the data to be stored in the following order
 ```
 Force | Stdev | Skewness | Extension | Distance | Force_mob | Force_fix | Stdev_mob | Stdev_fix
 ```
+
+## Contact
+Please direct any inquiries about the code to Dieter Kamp (kamp@genzentrum.lmu.de).
