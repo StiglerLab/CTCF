@@ -5,9 +5,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 from lmfit import Model
 import multiprocessing as mp
-#import cProfile  # TODO: For profiling, remove when done
-
-# TODO: Check bead modes (is 1 mobile?)
 
 KT = 1.38 * 10e-2 * 296
 ETA = 1e-9  # Water
@@ -122,7 +119,7 @@ class Trace:
                                                                                            width2)
         if np.isnan(defl_corr1).any():
             return pd.DataFrame(data=np.array([1e7]*(len(defl_corr1)-1)))
-        # TODO: fix the diff shortening somehow
+
         df_dx = np.diff(f_corr)/np.diff(ext_corr)
 
         calc_sigma = [0] * (len(force)-1)
@@ -252,7 +249,7 @@ class Trace:
         else:
             yw = sigma.copy()
         # return fitted sigma as yw
-        # Plot for visualisation; can be removed for performance gains
+        # Plot for visualisation
         if self.plot:
             plt.clf()
             plt.plot(x, y)
@@ -285,65 +282,7 @@ class Trace:
         except KeyError:
             pass
 
-    def plot(self, width=8, height=6, dpi=80):
-        """
-        Method to plot trace data, if corrected shows both uncorrected and corrected data.
-        :param width: width of figure in inches
-        :param height: height of figure in inches
-        :param dpi: resolution of figure
-        """
-        if self.corrected:
-            fig, axs = plt.subplots(2, 3, sharex='col', gridspec_kw=dict(height_ratios=[3, 1], hspace=0))
-            axs[0, 0].plot(self.dist, self.force, color="red")
-            axs[0, 0].set_xlabel("Distance (nm)")
-            axs[0, 0].set_ylabel("Force (pN)")
-            axs[0, 0].set_title("Uncorrected force")
-
-            axs[1, 0].plot(self.dist, self.ratio_init, color="red")
-            axs[1, 0].set_xlabel("Distance (nm)")
-            axs[1, 0].set_ylabel("sigma/stdev")
-
-            axs[0, 1].plot(self.dist, self.force_corr, color="green")
-            axs[0, 1].set_xlabel("Distance (nm)")
-            axs[0, 1].set_ylabel("Force (pN)")
-            axs[0, 1].set_title("Corrected force")
-
-            axs[1, 1].plot(self.dist, self.ratio_corr, color="green")
-            axs[1, 1].set_xlabel("Distance (nm)")
-            axs[1, 1].set_ylabel("sigma/stdev")
-
-            axs[0, 2].plot(self.dist, self.force_corr, color="green")
-            axs[0, 2].plot(self.dist, self.force, color="red")
-            axs[0, 2].set_ylabel("Force (pN)")
-            axs[0, 2].set_title("Overlay")
-
-            axs[1, 2].plot(self.dist, self.ratio_init, color="red")
-            axs[1, 2].plot(self.dist, self.ratio_corr, color="red")
-            axs[1, 2].set_xlabel("sigma/stdev")
-            axs[1, 2].set_ylabel("Distance (nm)")
-        else:
-            fig, axs = plt.subplots(2, 1, sharex='col', sharey='row', gridspec_kw=dict(height_ratios=[3, 1], hspace=0))
-            axs[0].plot(self.dist, self.force, color="red")
-            axs[1].plot(self.dist, self.stdev, color="red")
-            # axs[0].set_xlabel("Distance (nm)")
-            axs[1].set_xlabel("Distance (nm)")
-            axs[0].set_ylabel("Force (pN)")
-            axs[1].set_ylabel("Stdev (pN)")
-            # axs[0].set_title("Uncorrected force")
-            # axs[1].set_title("Standard deviation of force signal")
-        # fig.tight_layout()
-        plt.show()
-
-    def read_filter(self, filter_string: str):
-        filter_list = filter_string.lower().split(";")
-        filters = [x.split(',')[0] for x in filter_list]
-        parameters = [x.split(',')[1] for x in filter_list]
-        param_dict = {}
-        for i, filter in enumerate(filters):
-            param_dict[filter_params[filter]] = parameters[i]
-        self.filters = ';'.join(filters)
-        self.parameters = param_dict
-
+    
     # Redefine __repr__ and __str__ methods
     def __repr__(self):
         return f'Trace {self.name} ({len(self.force)} rows):\n{self.force} '
@@ -402,8 +341,6 @@ def correction(filename: str, k1_app: float, k2_app: float, filters: str = "", s
 
 
 if __name__ == "__main__":
-    a = Trace()
-    a.load_from_csv('simulated_nofilter.csv')
-    a.correct()
+    pass
 
 
