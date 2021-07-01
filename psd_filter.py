@@ -41,7 +41,7 @@ def parse_filter(psd, parameters: dict, filter_dict: dict, filter_string: str = 
     if len(filters) != 1 and filters[0] != '':
         for filter_name in filters:
             psd = filter_dict[filter_name](psd, parameters)
-    return np.sqrt(np.abs(np.trapz(psd, axis=0, x=psd.index)))  # Gets correct area - CHECKED
+    return np.sqrt(np.abs(np.trapz(psd, axis=0, x=psd.index))) 
 
 
 def ni447x(psd, parameters):
@@ -50,7 +50,7 @@ def ni447x(psd, parameters):
     coefs_mag = psd.copy(deep=True)  # !
     for x, val in psd.iterrows():
         if x < db447x.index[0]:
-            coefs_mag.iloc[coefs_mag.index.get_loc(x, method='nearest')] = 1  # fancy lookup for float indices
+            coefs_mag.iloc[coefs_mag.index.get_loc(x, method='nearest')] = 1 
         elif x > db447x.index[-1]:
             coefs_mag.iloc[coefs_mag.index.get_loc(x, method='nearest')] = 0
         else:
@@ -85,7 +85,7 @@ def boxcar(psd, parameters):
     n_avg = parameters['n_avg']
     psd_filtered = psd.copy(deep=True)
     coefs_mag = psd.copy(deep=True)
-    max_freq = psd.index[-1]  # I think
+    max_freq = psd.index[-1]  
     for x, val in coefs_mag.iterrows():
         try:
             coefs_mag.iloc[coefs_mag.index.get_loc(x, method='nearest')] = 1 / n_avg * np.abs(
@@ -155,7 +155,6 @@ def psd_resample_down(psd, parameters):
     indices_new = np.linspace(psd.index[0], psd.index[-1], int(length / 2) + 1)
     rs_coefs_fft = pd.DataFrame(data=rs_coefs_fft, index=indices_new)
     # Interpolate rs_coefs_fft to allow lookup for coefs_mag
-    # TODO: This works but looks horrible
     rs_coefs_fft_int = interpolate_psd(rs_coefs_fft, factor, len(rs_coefs_fft))
     rs_coefs_fft_int.index = rs_coefs_fft_int.iloc[:, 1]
     coefs = []
@@ -301,7 +300,7 @@ def psd_generate(k1, k2, k_d, f_sample_inf, beta_dagger1, beta_dagger2, mean_xi,
         r = a1 + a2 + mean_xi
         g = gamma_1 / ((6 * a) / (4 * r) - a ** 3 / r ** 3)
         v_b = beta_dagger1 * beta_dagger2
-        v_g = gamma_1 * gamma_2  # Not sure why this was a wave in IGOR
+        v_g = gamma_1 * gamma_2 
         if bead == 0:
             for x in theor_psd:
                 theor_psd_calc.append(2 * (2 * g * KT * (-2 * v_b * (g ** 2 - v_g) * (
@@ -442,7 +441,7 @@ def psd_generate(k1, k2, k_d, f_sample_inf, beta_dagger1, beta_dagger2, mean_xi,
     return pd.DataFrame(data=theor_psd_calc, index=theor_psd)
 
 
-def psd_subsample(psd, parameters):  # TODO: compare exact numbers to IGOR, otherwise this seems to work
+def psd_subsample(psd, parameters): 
     n_downsample = parameters['n_downsample']
     psd0 = psd.copy(deep=True)
     psd0['f'] = psd.index
