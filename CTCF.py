@@ -9,7 +9,7 @@ import multiprocessing as mp
 KT = 1.38 * 10e-2 * 296
 ETA = 1e-9  # Water
 D = 1000
-DIAM_BEAD = 4360
+DIAM_BEAD = 1000  # Default value
 
 # Dictionary for parsing filters; append keys and filter functions to add custom filters
 FILTER_DICT = {'qpd': psd_filter.qpd,
@@ -32,7 +32,6 @@ filter_params = {
     "sample": "n_downsample",  # alias for psd_subsample
     "ss": "n_downsample"  # alias for psd_subsample
 }
-
 
 
 class Trace:
@@ -166,7 +165,7 @@ class Trace:
         kc_app = 1 / (1 / self.k1_app + 1 / self.k2_app)
         self.k_dagger = (self.k_dagger1 / self.k1_app + self.k_dagger2 / self.k2_app) / (1 / kc_app)
         self.beta_dagger = np.divide(self.beta_dagger1 * self.k2_app * self.k_dagger1 + self.beta_dagger2 * self.k1_app * self.k_dagger2,
-                              self.k2_app * self.k_dagger1 + self.k1_app * self.k_dagger2)
+                                     self.k2_app * self.k_dagger1 + self.k1_app * self.k_dagger2)
         x = self.dist.copy(deep=True)
         if bead == 1:  # set stdev according to bead mode
             y = self.stdev_mob[:-1]
@@ -252,7 +251,7 @@ class Trace:
         # Plot for visualisation
         if self.plot:
             plt.clf()
-            plt.plot(x, y)
+            plt.plot(x, self.stdev)
             plt.plot(sigma.index, yw)
             plt.draw()
             plt.pause(0.001)
@@ -261,7 +260,6 @@ class Trace:
         print(self.fit_counter)
         self.fit_counter += 1
         return yw
-
 
     def load_from_csv(self, path: str,):
         """
@@ -282,7 +280,16 @@ class Trace:
         except KeyError:
             pass
 
-    
+    def read_filter(self, filter_string: str):
+        filter_list = filter_string.lower().split(";")
+        filters = [x.split(',')[0] for x in filter_list]
+        parameters = [x.split(',')[1] for x in filter_list]
+        param_dict = {}
+        for i, filter in enumerate(filters):
+            param_dict[filter_params[filter]] = parameters[i]
+        self.filters = ';'.join(filters)
+        self.parameters = param_dict
+
     # Redefine __repr__ and __str__ methods
     def __repr__(self):
         return f'Trace {self.name} ({len(self.force)} rows):\n{self.force} '
