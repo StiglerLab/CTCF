@@ -5,7 +5,6 @@ def correct_linker_soft_trap(force, dist, k1_app, k2_app, beta_dagger1, beta_dag
     kc_app = 1/(1/k1_app + 1/k2_app)
     k_dagger = (k_dagger1/k1_app + k_dagger2/k2_app)/(1/kc_app)
     beta_dagger = (beta_dagger1*k2_app*k_dagger1 + beta_dagger2*k1_app*k_dagger2)/(k2_app*k_dagger1+k1_app*k_dagger2)
-    # make waves?
     ext_corr = np.zeros(len(dist))
     dist_corr = np.zeros(len(dist))
     f_corr = np.zeros(len(dist))
