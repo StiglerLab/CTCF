@@ -251,7 +251,7 @@ class Trace:
         # Plot for visualisation
         if self.plot:
             plt.clf()
-            plt.plot(x, self.stdev)
+            plt.plot(x, self.stdev[:-1])
             plt.plot(sigma.index, yw)
             plt.draw()
             plt.pause(0.001)
@@ -283,10 +283,15 @@ class Trace:
     def read_filter(self, filter_string: str):
         filter_list = filter_string.lower().split(";")
         filters = [x.split(',')[0] for x in filter_list]
-        parameters = [x.split(',')[1] for x in filter_list]
+        parameters = [x.split(',')[1] for x in filter_list if len(x.split('1'))>1]
         param_dict = {}
+        j = 0
         for i, filter in enumerate(filters):
-            param_dict[filter_params[filter]] = parameters[i]
+            try:
+                param_dict[filter_params[filter]] = float(parameters[j])
+                j += 1
+            except (IndexError, KeyError):
+                pass
         self.filters = ';'.join(filters)
         self.parameters = param_dict
 

@@ -58,7 +58,6 @@ def ni447x(psd, parameters):
             coefs_mag.iloc[coefs_mag.index.get_loc(x, method='nearest')] = res.values[0]
 
     psd_filtered = psd * coefs_mag ** 2
-    print(psd_filtered)
     return psd_filtered
 
 
