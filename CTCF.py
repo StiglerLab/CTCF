@@ -89,7 +89,7 @@ class Trace:
         self.plot = False  # Toggle plotting of fit progress
 
     def calc_theor_sigma_var_kc(self, force, dist, k1_app, k2_app, beta_dagger1, beta_dagger2, k_dagger1, k_dagger2,
-                                width1, width2, bead, filter_string):
+                                width1, width2, bead):
         """
         Calculates theoretical sigma as part of the fitting routine.
         PSD generation and application of filters is multithreaded.
@@ -161,7 +161,7 @@ class Trace:
             print("Setting parameters")
         if len(force) == 1 or len(self.dist) == 1:
             raise Exception("No force extension curve")
-        sigma = self.calc_theor_sigma_var_kc(force, self.dist, self.k1_app, self.k2_app, self.beta_dagger1, self.beta_dagger2, self.k_dagger1, self.k_dagger2, self.width1, self.width2, bead, "")
+        sigma = self.calc_theor_sigma_var_kc(force, self.dist, self.k1_app, self.k2_app, self.beta_dagger1, self.beta_dagger2, self.k_dagger1, self.k_dagger2, self.width1, self.width2, bead)
         kc_app = 1 / (1 / self.k1_app + 1 / self.k2_app)
         self.k_dagger = (self.k_dagger1 / self.k1_app + self.k_dagger2 / self.k2_app) / (1 / kc_app)
         self.beta_dagger = np.divide(self.beta_dagger1 * self.k2_app * self.k_dagger1 + self.beta_dagger2 * self.k1_app * self.k_dagger2,
@@ -216,7 +216,7 @@ class Trace:
               f" beta_dagger: {self.beta_dagger}\n k_dagger:{self.k_dagger}")
         self.calc_sigma = self.calc_theor_sigma_var_kc(self.force, self.dist, self.k1_app, self.k2_app, self.beta_dagger1,
                                              self.beta_dagger2, self.k_dagger1, self.k_dagger2, self.width1,
-                                             self.width2, bead, "")
+                                             self.width2, bead)
         self.corrected = True
         if self.plot:
             plt.ioff()
