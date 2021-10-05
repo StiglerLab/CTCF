@@ -44,19 +44,20 @@ def parse_filter(psd, parameters: dict, filter_dict: dict, filter_string: str = 
     return np.sqrt(np.abs(np.trapz(psd, axis=0, x=psd.index))) 
 
 
-def ni447x(psd, parameters):
-    # Filters input PSD using NI-447x filter
-    db447x = parameters["db447x"]
-    coefs_mag = psd.copy(deep=True)  # !
-    for x, val in psd.iterrows():
-        if x < db447x.index[0]:
-            coefs_mag.iloc[coefs_mag.index.get_loc(x, method='nearest')] = 1 
-        elif x > db447x.index[-1]:
-            coefs_mag.iloc[coefs_mag.index.get_loc(x, method='nearest')] = 0
-        else:
-            res = 10 ** (db447x.iloc[db447x.index.get_loc(x, method='nearest')] / 20)
-            coefs_mag.iloc[coefs_mag.index.get_loc(x, method='nearest')] = res.values[0]
+def apply_ni447x(row, db447x):
+    if row.name < db447x.index[0]:
+        row[0] = 1
+    elif row.name > db447x.index[-1]:
+        row[0] = 0
+    else:
+        res = 10 ** (db447x.iloc[db447x.index.get_loc(row.name, method='nearest')] / 20)
+        row[0] = res.values[0]
 
+
+def ni447x(psd, parameters):
+    db447x = parameters['db447x']
+    coefs_mag = psd.copy()
+    coefs_mag.apply(apply_ni447x, axis=1, args=[db447x])
     psd_filtered = psd * coefs_mag ** 2
     return psd_filtered
 
