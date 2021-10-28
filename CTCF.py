@@ -61,7 +61,7 @@ class Trace:
         self.beta_dagger = (self.beta_dagger1 * self.k2_app * self.k_dagger1 + self.beta_dagger2 * self.k1_app * self.k_dagger2)
         self.beta_dagger = self.beta_dagger / (self.k2_app * self.k_dagger1 + self.k1_app * self.k_dagger2)  # Miscalibration factor of the nm/V calibration
         self.calc_sigma = np.empty(1)  # Calculated noise
-        self.f_generate = 5e7  # not sure
+        self.f_generate = 1e8  # not sure
         self.f_bessel = 1  # Cutoff for bessel filter
         self.n_downsample = 1  # Downsampling factor of data
         self.n_boxcar = 1  # Window size of boxcar filter
@@ -85,7 +85,7 @@ class Trace:
         self.fit_counter = 0  # Keep track of fit iterations
         self.db447x = psd_filter.load_db477x()  # Filter values for NI DB447x filter
         self.bead = 0  # Bead selection
-        self.parameters = []  # Dictionary for filter parameters
+        self.parameters = {}  # Dictionary for filter parameters
         self.plot = False  # Toggle plotting of fit progress
 
     def calc_theor_sigma_var_kc(self, force, dist, k1_app, k2_app, beta_dagger1, beta_dagger2, k_dagger1, k_dagger2,
