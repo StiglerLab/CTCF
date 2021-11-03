@@ -1,6 +1,7 @@
 # Correction of Tweezer Calibration Factors (CTCF)
 
-This code provides functions to correct miscalibration of optical tweezer measurements using the force noise signal.
+This code provides functions to correct miscalibration of optical tweezer measurements using the force noise signal.  
+A detailed description of the theory behind this code has been published in Freitag et al. J. Chem. Phys. 155, 175101 (2021). https://doi.org/10.1063/5.0063690
 
 
 ## Use
