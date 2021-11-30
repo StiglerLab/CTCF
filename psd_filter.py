@@ -94,7 +94,6 @@ def boxcar(psd, parameters):
             pass
     coefs_mag.iloc[coefs_mag.index.get_loc(coefs_mag.index[0], method='nearest')] = 1
     psd_filtered = psd * coefs_mag ** 2
-    print(psd_filtered)
     return psd_filtered
 
 
@@ -119,6 +118,7 @@ def interpolate_psd(psd, n_downsample: int, n_0: int):
     """
     Helper function for psd_subsample()
     """
+    n_downsample = int(n_downsample)
     # Make placeholders
     indices = [np.NaN] * ((n_0 * n_downsample) - n_downsample + 1)
     values = [np.NaN] * ((n_0 * n_downsample) - n_downsample + 1)

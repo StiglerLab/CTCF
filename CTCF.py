@@ -238,7 +238,7 @@ class Trace:
             ext_std = self.stdev.copy()
             ext_force = self.force.copy()
         sigma = self.calc_theor_sigma_var_kc(ext_force, x, k1_app, k2_app, beta_dagger1, beta_dagger2, k_dagger1,
-                                             k_dagger2, width1=width1, width2=width2, bead=bead, filter_string="")
+                                             k_dagger2, width1=width1, width2=width2, bead=bead)
         sigma_wo_mask = sigma.copy()
         sigma_wo_mask = sigma_wo_mask * self.mask
         sigma_wo_mask = np.array(sigma_wo_mask)
@@ -283,15 +283,12 @@ class Trace:
     def read_filter(self, filter_string: str):
         filter_list = filter_string.lower().split(";")
         filters = [x.split(',')[0] for x in filter_list]
-        parameters = [x.split(',')[1] for x in filter_list if len(x.split('1'))>1]
+        parameters = [x.split(',')[1] if len(x.split('1'))>1 else '' for x in filter_list]
         param_dict = {}
-        j = 0
         for i, filter in enumerate(filters):
-            try:
-                param_dict[filter_params[filter]] = float(parameters[j])
-                j += 1
-            except (IndexError, KeyError):
-                pass
+            if parameters[i]!='':
+                param_dict[filter_params[filter]] = float(parameters[i])
+        param_dict['db447x'] = self.db447x
         self.filters = ';'.join(filters)
         self.parameters = param_dict
 
