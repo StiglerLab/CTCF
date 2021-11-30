@@ -70,7 +70,7 @@ corrected_trace = correction(filename, k1, k2, [filter_string, sheet_name])
 ```
 The correction function assumes the data to be stored in the following order
 ```
-Force | Stdev | Skewness | Extension | Distance | Force_mob | Force_fix | Stdev_mob | Stdev_fix
+Force | Stdev | Distance | Force_mob | Force_fix | Stdev_mob | Stdev_fix
 ```
 
 ## Contact
