@@ -332,13 +332,12 @@ def correction(filename: str, k1_app: float, k2_app: float, filters: str = "", s
     trace.k2_app = k2_app
     trace.force = data.iloc[:, 0]
     trace.stdev = data.iloc[:, 1]
-    trace.ext_orig = data.iloc[:, 3]
-    trace.dist = data.iloc[:, 4]
+    trace.dist = data.iloc[:, 2]
     try:  # Load data for individual traps if available
-        trace.force_fix = data.iloc[:, 5]
-        trace.force_mob = data.iloc[:, 6]
-        trace.stdev_fix = data.iloc[:, 7]
-        trace.stdev_mob = data.iloc[:, 8]
+        trace.force_fix = data.iloc[:, 3]
+        trace.force_mob = data.iloc[:, 4]
+        trace.stdev_fix = data.iloc[:, 5]
+        trace.stdev_mob = data.iloc[:, 6]
     except KeyError:
         pass
     # Parse filters
