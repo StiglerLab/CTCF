@@ -38,7 +38,7 @@ def make_filter_params(db447x, n_downsample: int = 1, n_0: int = 4096, n_poles: 
 
 def parse_filter(psd, parameters: dict, filter_dict: dict, filter_string: str = "", sep=";"):
     filters = filter_string.split(sep=sep)
-    if len(filters) != 1 and filters[0] != '':
+    if len(filters) != 0 and filters[0] != '':
         for filter_name in filters:
             psd = filter_dict[filter_name](psd, parameters)
     return np.sqrt(np.abs(np.trapz(psd, axis=0, x=psd.index))) 
@@ -463,5 +463,4 @@ def psd_subsample(psd, parameters):
     psd_ss[0] = signal
     psd_ss.index /= n_downsample
     return psd_ss
-
 
