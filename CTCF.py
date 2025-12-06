@@ -81,6 +81,7 @@ class Trace:
         #--- Internal stack for troubleshooting      
         self.psd_orig = np.empty(1)    # PSD before filtering
         self.calc_sigma = np.empty(1)  # Calculated noise
+        self.ratio_fitted = None       # Ratio sigma_fit / sigma_exp
 
         self.f_bessel = 1  # Cutoff for bessel filter
         self.n_downsample = 1  # Downsampling factor of data
@@ -121,11 +122,18 @@ class Trace:
                                                                                            k_dagger1, k_dagger2, width1,
                                                                                            width2)
         if np.isnan(defl_corr1).any():
-            return pd.DataFrame(data=np.array([1e7]*(len(defl_corr1)-1)))
+            return 1e7*np.ones_like(force)
 
-        df_dx = np.diff(f_corr)/np.diff(ext_corr)
+        def central_diff(y, x):    
+            dydx = np.zeros_like(y)
+            dydx[1:-1] = (y[2:] - y[:-2]) / (x[2:] - x[:-2])
+            dydx[0] = (y[1] - y[0]) / (x[1] - x[0]) # fwd diff
+            dydx[-1] = (y[-1] - y[-2]) / (x[-1] - x[-2]) # bwd diff
+            return dydx
 
-        calc_sigma = [0] * (len(force)-1)
+        df_dx = central_diff(f_corr, ext_corr)
+
+        calc_sigma = np.zeros_like(force)
         kappa1 = np.pi * force * k_dagger1/(2*beta_dagger * k_dagger * k1_app * width1)
         kappa2 = np.pi * force * k_dagger2/(2*beta_dagger * k_dagger * k2_app * width2)
         k1_eff = k1_app / k_dagger1 * np.sqrt(1 - (kappa1**2))
@@ -142,10 +150,10 @@ class Trace:
         self.force_corr = f_corr.copy()
         self.ext_corr = ext_corr.copy()
         self.calc_sigma = calc_sigma
-        dist_temp = dist.copy()
+        dist_temp = dist.copy()        
         if np.isnan(calc_sigma).any():  # heavy penalization if NaNs are generated; prevents abort by Fit Error
-            return pd.DataFrame(data=np.array([1e7]*(len(defl_corr1)-1)))
-        return pd.DataFrame(data=calc_sigma, index=dist_temp[:-1])
+            return 1e7*np.ones_like(force)
+        return np.array(calc_sigma)
 
     def correct(self):
         """
@@ -164,7 +172,7 @@ class Trace:
                                                                 self.n_boxcar, self.n_resampledown)
             print("Setting parameters")
         if len(force) == 1 or len(self.dist) == 1:
-            raise Exception("No force extension curve")
+            raise Exception("No FDC")
         sigma = self.calc_theor_sigma_var_kc(force, self.dist, self.k1_app, self.k2_app, self.beta_dagger1, self.beta_dagger2, self.k_dagger1, self.k_dagger2, self.width1, self.width2, bead)
         kc_app = 1 / (1 / self.k1_app + 1 / self.k2_app)
         self.k_dagger = (self.k_dagger1 / self.k1_app + self.k_dagger2 / self.k2_app) / (1 / kc_app)
@@ -172,11 +180,11 @@ class Trace:
                                      self.k2_app * self.k_dagger1 + self.k1_app * self.k_dagger2)
         x = self.dist.copy(deep=True)
         if bead == 1:  # set stdev according to bead mode
-            y = self.stdev_mob[:-1]
+            y = self.stdev_mob
         elif bead == 2:
-            y = self.stdev_fix[:-1]
+            y = self.stdev_fix
         else:
-            y = self.stdev[:-1]
+            y = self.stdev
         if self.plot:
             plt.plot(self.dist, self.stdev)
             plt.ion()
@@ -249,20 +257,35 @@ class Trace:
             ext_force = self.force.copy()
         sigma = self.calc_theor_sigma_var_kc(ext_force, x, k1_app, k2_app, beta_dagger1, beta_dagger2, k_dagger1,
                                              k_dagger2, width1=width1, width2=width2, bead=bead)
-        sigma_wo_mask = sigma.copy()
-        sigma_wo_mask = sigma_wo_mask * self.mask
-        sigma_wo_mask = np.array(sigma_wo_mask)
-        sigma_wo_mask = sigma_wo_mask[~np.isnan(sigma_wo_mask)]  # remove nan
-        if len(sigma_wo_mask) == len(sigma):
-            yw = sigma_wo_mask.copy()
+
+        self.ratio_fitted = self.stdev / sigma.ravel()
+
+        sigma_masked = sigma.copy()
+        sigma_masked = np.array(sigma_masked * self.mask)
+        sigma_masked = sigma_masked[~np.isnan(sigma_masked)]  # remove NaN
+ 
+        if len(sigma_masked) == len(sigma):
+            yw = sigma_masked.copy()
         else:
             yw = sigma.copy()
 
-        # Plot for visualisation
+        # Plot for visualization
         if self.plot:
             plt.clf()
-            plt.plot(x, self.stdev[:-1])
-            plt.plot(sigma.index, yw)
+            plt.subplot(211)
+            plt.plot(x, np.log2(self.ratio_fitted), 'ko', mfc='white')
+            plt.ylabel('log2(Measured/Fitted)')
+            plt.axhline(y=0, color='k')
+            low, high = plt.ylim()
+            bound = max(abs(low), abs(high))
+            plt.ylim(-bound, bound)
+
+            plt.subplot(212)
+            plt.plot(x, self.stdev, 'ko', mfc='white', label='1+2 Measured')
+            plt.plot(x, yw, 'k-',label='1+2 Fitted')
+            plt.xlabel('Distance (nm)')
+            plt.ylabel(r'$\sigma$ (nm)')
+            plt.legend()
             plt.draw()
             plt.pause(0.001)
         print(f"{self.fit_counter:4d} {beta_dagger1:.3f}, {beta_dagger2:.3f}, {k_dagger1:.3f}, {k_dagger2:.3f}, {width1:.3f}, {width2:.3f}")
