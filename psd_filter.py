@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 import math
-
+import time
 
 
 # Set global constants
@@ -15,30 +15,6 @@ NU = ETA / RHO     # kinematic viscosity
 def load_db477x() -> pd.core.frame.DataFrame:  # Load filter data for NI447x filter
     return pd.read_csv("dB447x.txt", sep="\t", index_col=0, header=None, names=None)  # ni447x filter
 
-
-#FIXME redundant
-def make_filter_params(db447x, n_downsample: int = 1, n_0: int = 4096, n_poles: int = 1, f_cutoff: int = 10000,
-                       n_avg: int = 1, factor: int = 1):
-    """
-    Function to turn filter parameters into a dictionary that is later read by the parse_filter function
-    :param db447x: dataframe of ni447x filter data
-    :param n_downsample: downsampling factor
-    :param n_0:
-    :param n_poles:
-    :param f_cutoff:
-    :param n_avg:
-    :param factor:
-    :return:
-    """
-    return {
-        "n_downsample": n_downsample,
-        "n_0": n_0,
-        "n_poles": n_poles,
-        "f_cutoff": f_cutoff,
-        "n_avg": n_avg,
-        "factor": factor,
-        "db447x": db447x
-    }
 
 
 def check_filters(filter_dict: dict, filter_list: list):
@@ -90,23 +66,6 @@ def apply_filters(psd, filter_dict: dict, filter_list: list):
     return np.sqrt(np.abs(np.trapz(psd, axis=0, x=psd.index)))
 
     
-
-#FIXME will be redundant
-def parse_filter(psd, parameters: dict, filter_dict: dict, filter_string: str = "", sep=";"):
-    has_sample_stage = False
-
-    filters = filter_string.split(sep=sep)
-    if len(filters) != 0 and filters[0] != '':
-        for filter_name in filters:
-            if(filter_name == 'sample'):
-                has_sample_stage = True
-            psd = filter_dict[filter_name](psd, parameters)
-
-    if not has_sample_stage:
-        raise Exception("The filter string does not contain a sample stage")
-    
-    return np.sqrt(np.abs(np.trapz(psd, axis=0, x=psd.index))) 
-
 
 def apply_ni447x(row, db447x):
     if row.name < db447x.index[0]:
@@ -259,11 +218,24 @@ def psd_generate(k1, k2, k_d, f_sample_inf, beta_dagger1, beta_dagger2, mean_xi,
     gamma_2 = 6 * np.pi * ETA * diam2 / 2
     n_pnts = 4096
     max_freq = f_sample_inf / 2
-    theor_psd = np.linspace(0, max_freq, num=n_pnts)
+    freq = np.linspace(0, max_freq, num=n_pnts)
     theor_psd_calc = []
     if hydrodynamics == 'none':
         if bead == 0:
-            for x in theor_psd:
+
+            theor_psd_calc = (2 * (2 * KT * (-2 * beta_dagger1 * beta_dagger2 * k_d * (
+                gamma_2 * (k1 + k_d) + gamma_1 * (k2 + k_d)) + beta_dagger2 ** 2 * (
+                    gamma_1 * k_d ** 2 + gamma_2 * ((
+                        k1 + k_d) ** 2 + 4 * freq ** 2 * gamma_1 ** 2 * np.pi ** 2)) + beta_dagger1 ** 2 * (
+                            gamma_2 * k_d ** 2 + gamma_1 * ((
+                                k2 + k_d) ** 2 + 4 * freq ** 2 * gamma_2 ** 2 * np.pi ** 2)))) / (
+                                    (k2 * k_d + k1 * (k2 + k_d)) ** 2 + 4 * freq ** 2 * (
+                                        2 * gamma_1 * gamma_2 * k_d ** 2 + gamma_2 ** 2 * (
+                                            k1 + k_d) ** 2 + gamma_1 ** 2 * (
+                                                k2 + k_d) ** 2) * np.pi ** 2 + 16 * freq ** 4 * gamma_1 ** 2 * gamma_2 ** 2 * np.pi ** 4))
+            """            
+            
+            for x in freq:
                 theor_psd_calc.append(2 * (2 * KT * (-2 * beta_dagger1 * beta_dagger2 * k_d * (
                         gamma_2 * (k1 + k_d) + gamma_1 * (k2 + k_d)) + beta_dagger2 ** 2 * (
                                                              gamma_1 * k_d ** 2 + gamma_2 * ((
@@ -274,8 +246,9 @@ def psd_generate(k1, k2, k_d, f_sample_inf, beta_dagger1, beta_dagger2, mean_xi,
                                               2 * gamma_1 * gamma_2 * k_d ** 2 + gamma_2 ** 2 * (
                                               k1 + k_d) ** 2 + gamma_1 ** 2 * (
                                                       k2 + k_d) ** 2) * np.pi ** 2 + 16 * x ** 4 * gamma_1 ** 2 * gamma_2 ** 2 * np.pi ** 4))
-        elif bead == 1:
-            for x in theor_psd:
+            """
+        elif bead == 1: #FIXME vectorize all
+            for x in freq:
                 theor_psd_calc.append(2 * (2 * beta_dagger1 ** 2 * KT * (gamma_2 * k_d ** 2 + gamma_1 * (
                         (k2 + k_d) ** 2 + 4 * x ** 2 * gamma_2 ** 2 * np.pi ** 2))) / (
                                               (k2 * k_d + k1 * (k2 + k_d)) ** 2 + 4 * x ** 2 * (
@@ -283,7 +256,7 @@ def psd_generate(k1, k2, k_d, f_sample_inf, beta_dagger1, beta_dagger2, mean_xi,
                                               k1 + k_d) ** 2 + gamma_1 ** 2 * (
                                                       k2 + k_d) ** 2) * np.pi ** 2 + 16 * x ** 4 * gamma_1 ** 2 * gamma_2 ** 2 * np.pi ** 4))
         elif bead == 2:
-            for x in theor_psd:
+            for x in freq:
                 theor_psd_calc.append(2 * (2 * beta_dagger2 ** 2 * KT * (gamma_1 * k_d ** 2 + gamma_2 * (
                         (k1 + k_d) ** 2 + 4 * x ** 2 * gamma_1 ** 2 * np.pi ** 2))) / (
                                               (k1 * k_d + k2 * (k1 + k_d)) ** 2 + 4 * x ** 2 * (
@@ -297,7 +270,7 @@ def psd_generate(k1, k2, k_d, f_sample_inf, beta_dagger1, beta_dagger2, mean_xi,
         r_12 = diam1 / 2 + diam2 / 2 + mean_xi
         g = 4 * np.pi * ETA * r_12
         if bead == 0:
-            for x in theor_psd:
+            for x in freq:
                 theor_psd_calc.append(2 * (2 * g * KT * (
                         -2 * beta_dagger1 * beta_dagger2 * (g ** 2 - gamma_1 * gamma_2) * (
                         g * gamma_2 * k_d * (k1 + k_d) - gamma_1 * (
@@ -326,7 +299,7 @@ def psd_generate(k1, k2, k_d, f_sample_inf, beta_dagger1, beta_dagger2, mean_xi,
                                                               k1 * (k2 + k_d) + k_d * (
                                                               k2 + 2 * k_d))) * np.pi ** 2 + 16 * x ** 4 * g ** 4 * gamma_1 ** 2 * gamma_2 ** 2 * np.pi ** 4))
         elif bead == 1:
-            for x in theor_psd:
+            for x in freq:
                 theor_psd_calc.append(2 * (2 * beta_dagger1 ** 2 * g * KT * (
                         -2 * g ** 2 * gamma_1 * gamma_2 * k_d * (k2 + k_d) + 2 * (gamma_1 * gamma_2) ** 2 * k_d * (
                         k2 + k_d) - g * gamma_1 * gamma_2 * (
@@ -347,7 +320,7 @@ def psd_generate(k1, k2, k_d, f_sample_inf, beta_dagger1, beta_dagger2, mean_xi,
                                                               k2 + k_d) ** 2) * np.pi ** 2 + 16 * x ** 4 * (
                                                               gamma_1 * gamma_2) ** 2 * np.pi ** 4)))
         elif bead == 2:
-            for x in theor_psd:
+            for x in freq:
                 theor_psd_calc.append(2 * (2 * beta_dagger2 ** 2 * g * KT * (
                         -2 * g ** 2 * gamma_1 * gamma_2 * k_d * (k1 + k_d) + 2 * (gamma_1 * gamma_2) ** 2 * k_d * (
                         k1 + k_d) - g * gamma_1 * gamma_2 * (
@@ -379,7 +352,7 @@ def psd_generate(k1, k2, k_d, f_sample_inf, beta_dagger1, beta_dagger2, mean_xi,
         v_b = beta_dagger1 * beta_dagger2
         v_g = gamma_1 * gamma_2 
         if bead == 0:
-            for x in theor_psd:
+            for x in freq:
                 theor_psd_calc.append(2 * (2 * g * KT * (-2 * v_b * (g ** 2 - v_g) * (
                         g * gamma_2 * k_d * (k1 + k_d) - gamma_1 * (
                         gamma_2 * k1 * (k2 + k_d) - g * k_d * (k2 + k_d) + gamma_2 * k_d * (
@@ -408,7 +381,7 @@ def psd_generate(k1, k2, k_d, f_sample_inf, beta_dagger1, beta_dagger2, mean_xi,
                                                               k1 * (k2 + k_d) + k_d * (
                                                               k2 + 2 * k_d))) * np.pi ** 2 + 16 * x ** 4 * g ** 4 * v_g ** 2 * np.pi ** 4))
         elif bead == 1:
-            for x in theor_psd:
+            for x in freq:
                 theor_psd_calc.append(2 * (2 * beta_dagger1 ** 2 * g * KT * (
                         -2 * g ** 2 * v_g * k_d * (k2 + k_d) + 2 * v_g ** 2 * k_d * (k2 + k_d) - g * v_g * (
                         gamma_2 * k_d ** 2 + gamma_1 * (k2 + k_d) ** 2) + g ** 3 * (
@@ -421,7 +394,7 @@ def psd_generate(k1, k2, k_d, f_sample_inf, beta_dagger1, beta_dagger2, mean_xi,
                         2 * v_g * k_d ** 2 + gamma_2 ** 2 * (k1 + k_d) ** 2 + gamma_1 ** 2 * (
                         k2 + k_d) ** 2) * np.pi ** 2 + 16 * x ** 4 * v_g ** 2 * np.pi ** 4)))
         elif bead == 2:
-            for x in theor_psd:
+            for x in freq:
                 theor_psd_calc.append(2 * (2 * beta_dagger2 ** 2 * g * KT * (
                         -2 * g ** 2 * v_g * k_d * (k1 + k_d) + 2 * v_g ** 2 * k_d * (k1 + k_d) - g * v_g * (
                         gamma_1 * k_d ** 2 + gamma_2 * (k1 + k_d) ** 2) + g ** 3 * (
@@ -460,8 +433,8 @@ def psd_generate(k1, k2, k_d, f_sample_inf, beta_dagger1, beta_dagger2, mean_xi,
         v_b = beta_dagger1*beta_dagger2
         vgc = np.multiply(gamma1_self, gamma2_self)
         if bead == 1:
-            for i in range(len(theor_psd)):
-                x = theor_psd[i]
+            for i in range(len(freq)):
+                x = freq[i]
                 theor_psd_calc.append(
             2 * (2 * beta_dagger1 ** 2 * gamma_cross[i] * KT * (
                         -2 * gamma_cross[i] ** 2 * vgc[i] * k_d * (k2 + k_d) + 2 * vgc[i] ** 2 * k_d * (k2 + k_d) - gamma_cross[i] * vgc[i] * (
@@ -475,8 +448,8 @@ def psd_generate(k1, k2, k_d, f_sample_inf, beta_dagger1, beta_dagger2, mean_xi,
                                         2 * vgc[i] * k_d ** 2 + gamma2_self[i] ** 2 * (k1 + k_d) ** 2 + gamma1_self[i] ** 2 * (
                                             k2 + k_d) ** 2) * np.pi ** 2 + 16 * x ** 4 * vgc[i] ** 2 * np.pi ** 4)))
         elif bead == 2:
-            for i in range(len(theor_psd)):
-                x = theor_psd[i]
+            for i in range(len(freq)):
+                x = freq[i]
                 theor_psd_calc.append(
                  2 * (2 * beta_dagger2 ** 2 * gamma_cross[i] * KT * (
                             -2 * gamma_cross[i] ** 2 * vgc[i] * k_d * (k1 + k_d) + 2 * vgc[i] ** 2 * k_d * (k1 + k_d) - gamma_cross[i] * vgc[i] * (
@@ -494,8 +467,8 @@ def psd_generate(k1, k2, k_d, f_sample_inf, beta_dagger1, beta_dagger2, mean_xi,
                                                                    k2 + k_d) ** 2 + gamma2_self[i] ** 2 * (
                                                                            k1 + k_d) ** 2) * np.pi ** 2 + 16 * x ** 4 * vgc[i] ** 2 * np.pi ** 4)))
         else:
-            for i in range(len(theor_psd)):
-                x = theor_psd[i]
+            for i in range(len(freq)):
+                x = freq[i]
                 theor_psd_calc.append(2 * (2 * gamma_cross[i] * KT * (-2 * v_b * (gamma_cross[i] **2 - vgc[i]) * (gamma_cross[i] * gamma2_self[i] * k_d * (k1 + k_d) - gamma1_self[i] * (
                         gamma2_self[i] * k1 * (k2 + k_d) - gamma_cross[i] * k_d * (k2 + k_d) + gamma2_self[i] * k_d * (
                         k2 + 2 * k_d))) - 8 * v_b * x ** 2 * gamma_cross[i] ** 2 * vgc[i][i] ** 2 * np.pi ** 2 + beta_dagger2 ** 2 * (
@@ -515,32 +488,36 @@ def psd_generate(k1, k2, k_d, f_sample_inf, beta_dagger1, beta_dagger2, mean_xi,
                                               k2 + k_d) ** 2) + 2 * vgc[i][i] ** 2 * (k1 * (k2 + k_d) + k_d * (
                                               k2 + 2 * k_d))) * np.pi ** 2 + 16 * x ** 4 * gamma_cross[i] ** 4 * vgc[i][i] ** 2 * np.pi ** 4))
         theor_psd_calc = np.real(theor_psd_calc)
-    return pd.DataFrame(data=theor_psd_calc, index=theor_psd)
+    return pd.DataFrame(data=theor_psd_calc, index=freq)
+
+
 
 
 def psd_subsample(psd, parameters):
-    """
-    Sub-sample a signal by decimation
-    """
-    n_downsample = parameters['factor']
-    psd0 = psd.copy(deep=True)
-    psd0['f'] = psd.index
-    psd0.index = range(len(psd))
-    psd_interpol = psd.copy(deep=True)
-    psd_ss = psd.copy(deep=True)
-    n_0 = len(psd)
-    psd_interpol = interpolate_psd(psd_interpol, n_downsample, n_0)
-    max_freq_ind = int(len(psd_interpol) / n_downsample)
-    signal = [0] * len(psd0)
-    for i in range(0, n_downsample, 2):
-        f_start = i * max_freq_ind
-        for x in range(len(psd_ss)):
-            signal[x] += psd_interpol.iat[x + f_start, 0]
-    for i in range(1, n_downsample, 2):
-        f_start = (i + 1) * max_freq_ind
-        for x in range(len(psd_ss)):
-            signal[x] += psd_interpol.iat[f_start - x, 0]
-    psd_ss[0] = signal
-    psd_ss.index /= n_downsample
+    downsamplingfactor = parameters['factor']
+
+    psd_arr = psd.iloc[:, 0].to_numpy()
+    n_orig = len(psd_arr)
+    n_per_block = n_orig // downsamplingfactor
+    x = np.arange(n_per_block)
+
+    # Even blocks (i=0,2,4...)
+    even_i = np.arange(0, downsamplingfactor, 2)
+    even_blocks = psd_arr[even_i[:, None]*n_per_block + x[None, :]]
+    signal_even = even_blocks.sum(axis=0)
+
+    # Odd blocks (i=1,3,5...)
+    odd_i = np.arange(1, downsamplingfactor, 2)
+    odd_blocks = psd_arr[(odd_i[:, None]+1)*n_per_block - 1 - x[None, :]]
+    signal_odd = odd_blocks.sum(axis=0)
+
+    # Combine signals
+    signal = signal_even + signal_odd
+
+    # Correct frequency axis
+    freqs_new = np.linspace(psd.index[0], psd.index[-1] / downsamplingfactor, n_per_block)
+
+    psd_ss = pd.DataFrame({psd.columns[0]: signal}, index=freqs_new)
+   
     return psd_ss
 

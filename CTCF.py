@@ -5,7 +5,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from lmfit import Model
 import multiprocessing as mp
-
+import time
 
 
 # Dictionary for parsing filters; append keys and filter functions to add custom filters
@@ -118,7 +118,7 @@ class Trace:
         k_dagger = (k_dagger1 / k1_app + k_dagger2 / k2_app) / (1 / kc_app)
         beta_dagger = (beta_dagger1 * k2_app * k_dagger1 + beta_dagger2 * k1_app * k_dagger2) / (
                     k2_app * k_dagger1 + k1_app * k_dagger2)
-        dist = self.dist.copy()
+        dist = self.dist.copy() #FIXME
         ext_corr, f_corr, defl_corr1, defl_corr2 = nonlinear_trap.correct_linker_soft_trap(force, dist, k1_app, k2_app,
                                                                                            beta_dagger1, beta_dagger2,
                                                                                            k_dagger1, k_dagger2, width1,
@@ -135,9 +135,8 @@ class Trace:
 
         df_dx = central_diff(f_corr, ext_corr)
 
-        f_sample, total_oversampling_factor = psd_filter.check_filters(FILTER_DICT, self.filters)
-        f_generate = self.oversampling_factor * f_sample
-        print(f"Generating PSD at {f_generate/1000:.3f} kHz.")
+        f_sample, total_downsampling_factor = psd_filter.check_filters(FILTER_DICT, self.filters)
+        f_generate = psd_filter.OVERSAMPLING_FACTOR*f_sample
 
         calc_sigma = np.zeros_like(force)
         kappa1 = np.pi * force * k_dagger1/(2*beta_dagger * k_dagger * k1_app * width1)
@@ -146,14 +145,16 @@ class Trace:
         k2_eff = k2_app / k_dagger2 * np.sqrt(1 - (kappa2**2))
         beta_dagger_total1 = beta_dagger1 * np.sqrt(1 - (kappa1**2))
         beta_dagger_total2 = beta_dagger2 * np.sqrt(1 - (kappa2**2))
-        pool = mp.Pool(processes=4) #FIXME
+
+        pool = mp.Pool()
         psd_orig = pool.starmap(psd_filter.psd_generate, [(k1_eff[i], k2_eff[i], df_dx[i], f_generate, beta_dagger_total1[i], beta_dagger_total2[i], ext_corr[i], self.bead_diameter1, self.bead_diameter2, self.hydrodynamics, bead) for i in range(len(calc_sigma))])
-        #calc_sigma = pool.starmap(psd_filter.parse_filter, [(psd_orig[i], self.parameters, FILTER_DICT, self.filters) for i in range(len(calc_sigma))])
+        t1 = time.perf_counter()
         calc_sigma = pool.starmap(psd_filter.apply_filters, [(psd_orig[i], FILTER_DICT, self.filters) for i in range(len(calc_sigma))])
+        print("PERF", time.perf_counter()-t1)
         pool.close()
         pool.join()
         self.ext_orig = dist - self.force / self.kc_app
-        self.dist_orig = self.dist.copy()
+        self.dist_orig = self.dist.copy() #FIXME
         self.force_corr = f_corr.copy()
         self.ext_corr = ext_corr.copy()
         self.calc_sigma = calc_sigma
@@ -162,11 +163,13 @@ class Trace:
             return 1e7*np.ones_like(force)
         return np.array(calc_sigma)
 
+    
     def correct(self):
         """
         Main method that's called for correction of miscalibration after data loading.
         Calls fit_sigma_filter method for correction.
         """
+        
         bead = self.bead
         if bead == 1:
             force = self.force_mob
@@ -174,15 +177,13 @@ class Trace:
             force = self.force_fix
         else:
             force = self.force
-        if not self.parameters:
-            self.parameters = psd_filter.make_filter_params(self.db447x, self.n_downsample, 4096, 1, self.f_bessel,
-                                                                self.n_boxcar, self.n_resampledown)
-            print("Setting parameters")
+
         if len(force) == 1 or len(self.dist) == 1:
             raise Exception("No FDC")
+        
         sigma = self.calc_theor_sigma_var_kc(force, self.dist, self.k1_app, self.k2_app, self.beta_dagger1, self.beta_dagger2, self.k_dagger1, self.k_dagger2, self.width1, self.width2, bead)
-        kc_app = 1 / (1 / self.k1_app + 1 / self.k2_app)
-        self.k_dagger = (self.k_dagger1 / self.k1_app + self.k_dagger2 / self.k2_app) / (1 / kc_app)
+        #kc_app = 1 / (1 / self.k1_app + 1 / self.k2_app)
+        self.k_dagger = (self.k_dagger1 / self.k1_app + self.k_dagger2 / self.k2_app) / (1 / self.kc_app)
         self.beta_dagger = np.divide(self.beta_dagger1 * self.k2_app * self.k_dagger1 + self.beta_dagger2 * self.k1_app * self.k_dagger2,
                                      self.k2_app * self.k_dagger1 + self.k1_app * self.k_dagger2)
         x = self.dist.copy(deep=True)
