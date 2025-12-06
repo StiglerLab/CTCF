@@ -2,10 +2,10 @@ import numpy as np
 import pandas as pd
 
 # Set global constants
-KT = 1.38e-2 * 298
-ETA = 0.89e-9
-RHO = 0.99823e-21  # Water
-NU = ETA / RHO  # kinematic viscosity
+KT = 1.38e-2 * 298 # kBT at room temperature in pN*nm
+ETA = 0.89e-9      # Shear viscosity of water in pN s / nm^2
+RHO = 0.99823e-21  # Density of water in pN s^2 nm^-4
+NU = ETA / RHO     # kinematic viscosity
 
 
 def load_db477x() -> pd.core.frame.DataFrame:  # Load filter data for NI447x filter

@@ -33,57 +33,64 @@ filter_params = {
 
 class Trace:
     def __init__(self):
-        self.name = ""  # Used as an identifier in print statements
-        self.force = np.empty(1)  # Uncorrected force; must be set for correction
-        self.force_mob = np.empty(1)  # Uncorrected force from mobile trap
-        self.force_fix = np.empty(1)  # Uncorrected force from fixed trap
-        self.force_err = np.empty(1)  # Error of uncorrected force; no idea where this comes from
-        self.dist = np.empty(1)  # Distance values corresponding to the force data; must be set for correction
-        self.stdev = np.empty(1)  # Standard deviation of force signal; must be set for correction
-        self.stdev_mob = np.empty(1)  # Standard deviation of force signal in mobile trap
-        self.stdev_fix = np.empty(1)  # Standard deviation of force signal in fixed trap
-        self.bead_diameter = DIAM_BEAD  # Diameter of beads in µm used for tethering
-        self.bead_diameter1 = DIAM_BEAD  # Diameter of bead in immobile trap in µm
-        self.bead_diameter2 = DIAM_BEAD  # Diameter of bead in mobile trap in µm
-        self.k_fixed = .3  # Spring constant of the immobile trap
-        self.k_mobile = .3  # Spring constant of mobile trap
-        self.k1_app = self.k_mobile  # I think
-        self.k2_app = self.k_fixed  # I think
-        self.kc_app = 1 / (1 / self.k1_app + 1 / self.k2_app)  # Apparent k/s
-        self.k_dagger1 = 1.0  # Miscalibration factor of k_fixed?
-        self.k_dagger2 = 1.0  # Miscalibration factor of k_mobile?
-        self.k_dagger = (self.k_dagger1 / self.k1_app + self.k_dagger2 / self.k2_app) / (1 / self.kc_app)  # Miscalibration factor of k
-        self.beta_dagger1 = 1.0  # Miscalibration factor of the nm/V calibration of the fixed trao
-        self.beta_dagger2 = 1.0  # Miscalibration factor of the nm/V calibration of the mobile trap
-        self.beta_dagger = (self.beta_dagger1 * self.k2_app * self.k_dagger1 + self.beta_dagger2 * self.k1_app * self.k_dagger2)
-        self.beta_dagger = self.beta_dagger / (self.k2_app * self.k_dagger1 + self.k1_app * self.k_dagger2)  # Miscalibration factor of the nm/V calibration
+        self.name = ""                # Used as an identifier in print statements
+
+        #--- Settings
+        self.hydrodynamics = 'none'   # Hydrodynamics correction mode
+        self.plot = True              # Toggle plotting of fit progress     
+        self.f_generate = 1e7         # Generate PSDs up to this frequency (Hz)
+        
+        #--- Measured FDC data
+        self.force = np.empty(1)      # Uncorrected force (pN); must be set for correction
+        self.dist = np.empty(1)       # Distance (nm) corresponding to the force data; must be set for correction
+        self.stdev = np.empty(1)      # Standard deviation of total deflection signal (nm); must be set for correction
+
+        self.force_mob = np.empty(1)  # Uncorrected force (pN) from mobile trap
+        self.force_fix = np.empty(1)  # Uncorrected force (pN) from fixed trap
+        self.stdev_mob = np.empty(1)  # Standard deviation of deflection signal in mobile trap (nm)
+        self.stdev_fix = np.empty(1)  # Standard deviation of deflection signal in fixed trap (nm)
+
+        self.mask = 1#FIXME np.empty(1)       # Masking array: same size as force, dist, etc. NaN values are excluded from fit
+
+        
+        #--- Measured parameters
+        self.bead_diameter1 = 1000    # Diameter of bead in mobile trap (nm)
+        self.bead_diameter2 = 1000    # Diameter of bead in fixed trap (nm)
+
+        self.k1_app = .3              # Apparent spring constant of mobile trap before correction (pN/nm)
+        self.k2_app = .3              # Apparent spring constant of fixed trap before correction (pN/nm)
+
+        #--- Outputs
+        self.corrected = False        # Flag to indicate whether correction of the traces has been done
+        self.kc_app = 1 / (1 / self.k1_app + 1 / self.k2_app)  # Apparent combined spring constant
+        self.k_dagger1 = 1.0          # Miscalibration factor of k_mobile
+        self.k_dagger2 = 1.0          # Miscalibration factor of k_fixed
+        self.k_dagger = (self.k_dagger1 / self.k1_app + self.k_dagger2 / self.k2_app) / (1 / self.kc_app)  # Combined miscalibration factor of k_c
+        self.beta_dagger1 = 1.0       # Miscalibration factor of the nm/V calibration of mobile trap
+        self.beta_dagger2 = 1.0       # Miscalibration factor of the nm/V calibration of fixed trap
+        self.beta_dagger = ((self.beta_dagger1 * self.k2_app * self.k_dagger1 + self.beta_dagger2 * self.k1_app * self.k_dagger2) /
+                            (self.k2_app * self.k_dagger1 + self.k1_app * self.k_dagger2))  # Combined miscalibration factor of the nm/V calibration
+        self.width1 = 800             # Non-harmonicity parameter mobile trap (nm)
+        self.width2 = 800             # Non-harmonicity parmaeter fixed trap (nm)
+
+        self.ext_orig = np.empty(1)   # Original extension data (nm)
+        self.ext_corr = np.empty(1)   # Corrected extension data (nm)
+        self.force_corr = np.empty(1) # Corrected force data (pN)
+       
+
+        #--- Internal stack for troubleshooting      
+        self.psd_orig = np.empty(1)    # PSD before filtering
         self.calc_sigma = np.empty(1)  # Calculated noise
-        self.f_generate = 1e7  # not sure
+
         self.f_bessel = 1  # Cutoff for bessel filter
         self.n_downsample = 1  # Downsampling factor of data
         self.n_boxcar = 1  # Window size of boxcar filter
-        self.force_corr = np.empty(1)  # Corrected force data
-        self.ext_corr = np.empty(1)  # not sure
-        self.ext_orig = np.empty(1)
-        self.dist_orig = np.empty(1)
-        self.f_orig = np.empty(1)
-        self.ratio_init = np.empty(1)  # Ratio calc_sigma/stdev before correction
-        self.ratio_corr = np.empty(1)  # Ratio calc_sigma/stdev after correction
-        self.corrected = False  # Flag to indicate whether correction of the traces has been done
-        self.hydrodynamics = 'none'  # Hydrodynamics mode
         self.n_resampledown = 1
-        self.psd_orig = np.empty(1)
-        self.psd_final = np.empty(1)
-        self.sigma_pred_corr = np.empty(1)
         self.filters = ''  # Filters applied to signal; separated by ';'
-        self.mask = 1
-        self.width1 = 800
-        self.width2 = 800
         self.fit_counter = 0  # Keep track of fit iterations
         self.db447x = psd_filter.load_db477x()  # Filter values for NI DB447x filter
         self.bead = 0  # Bead selection
         self.parameters = {}  # Dictionary for filter parameters
-        self.plot = False  # Toggle plotting of fit progress
 
     def calc_theor_sigma_var_kc(self, force, dist, k1_app, k2_app, beta_dagger1, beta_dagger2, k_dagger1, k_dagger2,
                                 width1, width2, bead):
@@ -136,7 +143,7 @@ class Trace:
         self.ext_corr = ext_corr.copy()
         self.calc_sigma = calc_sigma
         dist_temp = dist.copy()
-        if np.isnan(calc_sigma).any():  # heavy penalisation if NaNs are generated; prevents abort by Fit Error
+        if np.isnan(calc_sigma).any():  # heavy penalization if NaNs are generated; prevents abort by Fit Error
             return pd.DataFrame(data=np.array([1e7]*(len(defl_corr1)-1)))
         return pd.DataFrame(data=calc_sigma, index=dist_temp[:-1])
 
@@ -177,36 +184,43 @@ class Trace:
             plt.pause(0.0001)
 
         fmodel = Model(self.fit_sigma_filter)
-        params = fmodel.make_params(beta_dagger1=np.log(self.beta_dagger1), beta_dagger2=np.log(self.beta_dagger2), k_dagger1=np.log(self.k_dagger1), k_dagger2=np.log(self.k_dagger2), width1=self.width1, width2=self.width2, k1_app=self.k1_app, k2_app=self.k2_app, bead=bead)
+        params = fmodel.make_params(logbeta_dagger1=np.log(self.beta_dagger1),
+                                    logbeta_dagger2=np.log(self.beta_dagger2),
+                                    logk_dagger1=np.log(self.k_dagger1),
+                                    logk_dagger2=np.log(self.k_dagger2),
+                                    width1=self.width1, width2=self.width2,
+                                    k1_app=self.k1_app, k2_app=self.k2_app,
+                                    bead=bead)
+        
         params['k1_app'].vary = False
         params['k2_app'].vary = False
         params['bead'].vary = False
-        params['beta_dagger1'].min = np.log(0.5)
-        params['beta_dagger1'].max = np.log(2)
-        params['beta_dagger2'].min = np.log(0.5)
-        params['beta_dagger2'].max = np.log(2)
-        params['k_dagger1'].min = np.log(0.5)
-        params['k_dagger2'].min = np.log(0.5)
-        params['k_dagger2'].max = np.log(2)
-        params['width1'].min = 300
+        params['logbeta_dagger1'].min = np.log(0.5)
+        params['logbeta_dagger1'].max = np.log(2)
+        params['logbeta_dagger2'].min = np.log(0.5)
+        params['logbeta_dagger2'].max = np.log(2)
+        params['logk_dagger1'].min = np.log(0.5)
+        params['logk_dagger1'].max = np.log(2)
+        params['logk_dagger2'].min = np.log(0.5)
+        params['logk_dagger2'].max = np.log(2)
+        params['width1'].min = 100
         params['width1'].max = 4000
-        params['width2'].min = 300
+        params['width2'].min = 100
         params['width2'].max = 4000
 
         result = fmodel.fit(y, params, x=x)
-        self.beta_dagger1 = 10**result.params['beta_dagger1'].value
-        self.beta_dagger2 = 10**result.params['beta_dagger2'].value
-        self.k_dagger1 = 10**result.params['k_dagger1'].value
-        self.k_dagger2 = 10**result.params['k_dagger2'].value
+        self.beta_dagger1 = 10**result.params['logbeta_dagger1'].value
+        self.beta_dagger2 = 10**result.params['logbeta_dagger2'].value
+        self.k_dagger1 = 10**result.params['logk_dagger1'].value
+        self.k_dagger2 = 10**result.params['logk_dagger2'].value
         self.width1 = result.params['width1'].value
         self.width2 = result.params['width2'].value
 
         # Update self.k_dagger1, self.k_dagger2, self.beta_dagger1 and self.beta_dagger2 with fit values
         self.kc_app = 1 / (1 / self.k1_app + self.k2_app)
         self.k_dagger = (self.k_dagger1 / self.k1_app + self.k_dagger2 / self.k2_app) / (1 / self.kc_app)
-        self.beta_dagger = (
-                                   self.beta_dagger1 * self.k2_app * self.k_dagger1 + self.beta_dagger2 * self.k1_app * self.k_dagger2) / (
-                                   self.k2_app * self.k_dagger1 + self.k1_app * self.k_dagger2)
+        self.beta_dagger = (self.beta_dagger1 * self.k2_app * self.k_dagger1 + self.beta_dagger2 *
+                            self.k1_app * self.k_dagger2) / (self.k2_app * self.k_dagger1 + self.k1_app * self.k_dagger2)
         print(f"Corrected trace {self.name}.\n New calibration factors:"
               f"\n beta_dagger1: {self.beta_dagger1}\n beta_dagger2: {self.beta_dagger2}\n"
               f" k_dagger1: {self.k_dagger1}\n k_dagger2: {self.k_dagger2}\n"
@@ -219,12 +233,11 @@ class Trace:
             plt.ioff()
             plt.show()
 
-    def fit_sigma_filter(self, x, beta_dagger1, beta_dagger2, k_dagger1, k_dagger2, width1, width2, k1_app, k2_app,
-                         bead):
-        beta_dagger1 = 10**beta_dagger1
-        beta_dagger2 = 10**beta_dagger2
-        k_dagger1 = 10**k_dagger1
-        k_dagger2 = 10**k_dagger2
+    def fit_sigma_filter(self, x, logbeta_dagger1, logbeta_dagger2, logk_dagger1, logk_dagger2, width1, width2, k1_app, k2_app, bead):
+        beta_dagger1 = 10**logbeta_dagger1
+        beta_dagger2 = 10**logbeta_dagger2
+        k_dagger1 = 10**logk_dagger1
+        k_dagger2 = 10**logk_dagger2
         if bead == 1:
             ext_std = self.stdev_mob.copy()
             ext_force = self.force_mob.copy()
@@ -269,7 +282,6 @@ class Trace:
         self.dist = data.loc[:, 'Distance']
         self.force = data.loc[:, 'Force']
         self.stdev = data.loc[:, 'Stdev']
-        self.force_err = self.force  # TODO: Where does this come from?; self.force as placeholder for now
         try:  # Trap specific values are optional, this skips loading them if they aren't present
             self.force_mob = data.loc[:, 'Force_1']
             self.force_fix = data.loc[:, 'Force_2']
