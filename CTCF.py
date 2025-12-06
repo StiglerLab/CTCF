@@ -6,10 +6,7 @@ import matplotlib.pyplot as plt
 from lmfit import Model
 import multiprocessing as mp
 
-KT = 1.38 * 10e-2 * 296
-ETA = 1e-9  # Water
-D = 1000
-DIAM_BEAD = 1000  # Default value
+
 
 # Dictionary for parsing filters; append keys and filter functions to add custom filters
 FILTER_DICT = {'qpd': psd_filter.qpd,
@@ -93,16 +90,16 @@ class Trace:
         """
         Calculates theoretical sigma as part of the fitting routine.
         PSD generation and application of filters is multithreaded.
-        :param force: Force data
-        :param dist:  Distance data
-        :param k1_app: Apparent (incorrect) k for trap 1
-        :param k2_app: Apparent (incorrect) k for trap 2
+        :param force: Force data (pN)
+        :param dist:  Distance data (nm)
+        :param k1_app: Apparent (incorrect) k for trap 1 (pN/nm)
+        :param k2_app: Apparent (incorrect) k for trap 2 (pN/nm)
         :param beta_dagger1: Correction factor beta_dagger for trap 1
         :param beta_dagger2: Correction factor beta_dagger for trap 2
         :param k_dagger1: Correction factor k_dagger for trap 1
         :param k_dagger2: Correction factor k_dagger for trap 2
-        :param width1:
-        :param width2:
+        :param width1: Non-harmonicity parmeter for trap 1 (nm)
+        :param width2: Non-harmonicity parmeter for trap 2 (nm)
         :param bead: Bead selection for calculation; default = 0: both beads
         :param filter_string: String containing the applied filters
         :return: Theoretical noise sigma
@@ -247,7 +244,7 @@ class Trace:
             yw = sigma_wo_mask.copy()
         else:
             yw = sigma.copy()
-        # return fitted sigma as yw
+
         # Plot for visualisation
         if self.plot:
             plt.clf()
@@ -255,12 +252,13 @@ class Trace:
             plt.plot(sigma.index, yw)
             plt.draw()
             plt.pause(0.001)
-        print(beta_dagger1, beta_dagger2, k_dagger1, k_dagger2, width1, width2)
-        print(k1_app * k_dagger1)
-        print(self.fit_counter)
+        print(f"{self.fit_counter:4d} {beta_dagger1:.3f}, {beta_dagger2:.3f}, {k_dagger1:.3f}, {k_dagger2:.3f}, {width1:.3f}, {width2:.3f}")
+
         self.fit_counter += 1
+        # return fitted sigma as yw
         return yw
 
+    # FIXME Headers?
     def load_from_csv(self, path: str,):
         """
         Method for loading in data. Format: .csv file with force as $root_F, distance as $root_Dist and Stdev as $root_Stdev
