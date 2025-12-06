@@ -56,12 +56,11 @@ def apply_filters(psd, filter_dict: dict, filter_list: list):
     
     for filter in filter_list:
         ftype = filter['type']
-        typekey, *fparameters = filter.keys()
 
         if ftype == 'sample':
             psd = filter_dict[ftype](psd, {'factor': total_downsampling_factor*OVERSAMPLING_FACTOR})
         else:
-            psd = filter_dict[ftype](psd, fparameters)
+            psd = filter_dict[ftype](psd, filter)
 
     return np.sqrt(np.abs(np.trapz(psd, axis=0, x=psd.index)))
 
@@ -85,6 +84,7 @@ def ni447x(psd, parameters):
     return psd_filtered
 
 
+#TODO: optimize
 def bessel8(psd, parameters):
     f_cutoff = parameters['f_cutoff']
     f_mod = f_cutoff / 3.17962
@@ -123,10 +123,10 @@ def boxcar(psd, parameters):
     return psd_filtered
 
 
-#FIXME: poles!!!
 def butterworth(psd, parameters):
     f_cutoff = parameters['f_cutoff']
-    coefs_mag = [1 / np.sqrt(1 + (coef / f_cutoff) ** 2) for coef in psd.index]
+    n_poles = parameters['n_poles']
+    coefs_mag = [1 / np.sqrt(1 + (coef / f_cutoff) ** (2*n_poles)) for coef in psd.index]
     psd_filtered = psd.copy(deep=True)
     psd_filtered.iloc[:, 0] *= coefs_mag
     return psd_filtered
@@ -138,9 +138,23 @@ def qpd(psd, parameters):
     """
     gam = 0.44
     f_0 = 11.1e3
-    coefs_mag = [gam ** 2 + ((1 - gam ** 2) / (1 + (coef / f_0) ** 2)) for coef in psd.index]
+    freqs = psd.index.to_numpy()  # vectorized access
+    coefs_mag = gam**2 + (1 - gam**2) / (1 + (freqs / f_0)**2)
     psd_filtered = psd.copy(deep=True)
-    psd_filtered.iloc[:, 0] *= coefs_mag
+    psd_filtered.iloc[:, 0] = psd_filtered.iloc[:, 0].to_numpy() * coefs_mag
+    return psd_filtered
+
+
+def psd(psd, parameters):
+    """
+    Filtering of a position-sensitive device like the DL100-7
+    """
+    gam = 0.6
+    f_0 = 26.695e3
+    freqs = psd.index.to_numpy()  # vectorized access
+    coefs_mag = gam**2 + (1 - gam**2) / (1 + (freqs / f_0)**2)
+    psd_filtered = psd.copy(deep=True)
+    psd_filtered.iloc[:, 0] = psd_filtered.iloc[:, 0].to_numpy() * coefs_mag
     return psd_filtered
 
 
@@ -208,6 +222,7 @@ def load_resample_coefs(factor: int):
     return rs_coef
 
 
+#TODO: This can be optimized for speed
 def psd_generate(k1, k2, k_d, f_sample_inf, beta_dagger1, beta_dagger2, mean_xi, diam1=1000, diam2=1000,
                  hydrodynamics='hansen rp', bead=0) -> pd.core.frame.DataFrame:
     """

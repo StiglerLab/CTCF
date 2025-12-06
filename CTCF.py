@@ -10,6 +10,7 @@ import time
 
 # Dictionary for parsing filters; append keys and filter functions to add custom filters
 FILTER_DICT = {'qpd': psd_filter.qpd,
+               'psd': psd_filter.psd,
                'bessel8': psd_filter.bessel8,
                'butterworth': psd_filter.butterworth,
                'sample': psd_filter.psd_subsample,
@@ -17,16 +18,6 @@ FILTER_DICT = {'qpd': psd_filter.qpd,
                'igorresample': psd_filter.psd_resample_down,
                'ni447x': psd_filter.ni447x,
                "subsample": psd_filter.psd_subsample}
-# Dictionary for assigning filter parameters to the right key when using read_filter()
-filter_params = {
-    "ni447x": "db447x",
-    "bessel8": "f_cutoff",
-    "boxcar": "n_avg",
-    "butterworth": "f_cutoff",
-    "psd_resample_down": "factor",
-    "subsample": "n_downsample",
-    "sample": "frequency",
-}
 
 
 
@@ -38,7 +29,7 @@ class Trace:
         self.name = ""                # Used as an identifier in print statements
 
         #--- Settings
-        self.hydrodynamics = 'none'   # Hydrodynamics correction mode
+        self.hydrodynamics = 'hansen rp'   # Hydrodynamics correction mode
         self.plot = True              # Toggle plotting of fit progress     
         self.oversampling_factor = 10 # Generate PSDs up to this factor above the original sampling frequency
         
@@ -147,8 +138,8 @@ class Trace:
         beta_dagger_total2 = beta_dagger2 * np.sqrt(1 - (kappa2**2))
 
         pool = mp.Pool()
-        psd_orig = pool.starmap(psd_filter.psd_generate, [(k1_eff[i], k2_eff[i], df_dx[i], f_generate, beta_dagger_total1[i], beta_dagger_total2[i], ext_corr[i], self.bead_diameter1, self.bead_diameter2, self.hydrodynamics, bead) for i in range(len(calc_sigma))])
         t1 = time.perf_counter()
+        psd_orig = pool.starmap(psd_filter.psd_generate, [(k1_eff[i], k2_eff[i], df_dx[i], f_generate, beta_dagger_total1[i], beta_dagger_total2[i], ext_corr[i], self.bead_diameter1, self.bead_diameter2, self.hydrodynamics, bead) for i in range(len(calc_sigma))])
         calc_sigma = pool.starmap(psd_filter.apply_filters, [(psd_orig[i], FILTER_DICT, self.filters) for i in range(len(calc_sigma))])
         print("PERF", time.perf_counter()-t1)
         pool.close()
