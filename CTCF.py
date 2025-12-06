@@ -16,8 +16,7 @@ FILTER_DICT = {'qpd': psd_filter.qpd,
                'boxcar': psd_filter.boxcar,
                'igorresample': psd_filter.psd_resample_down,
                'ni447x': psd_filter.ni447x,
-               'sub': psd_filter.psd_subsample,
-               "ss": psd_filter.psd_subsample}
+               "subsample": psd_filter.psd_subsample}
 # Dictionary for assigning filter parameters to the right key when using read_filter()
 filter_params = {
     "ni447x": "db447x",
@@ -25,10 +24,13 @@ filter_params = {
     "boxcar": "n_avg",
     "butterworth": "f_cutoff",
     "psd_resample_down": "factor",
-    "psd_subsample": "n_downsample",
-    "sample": "n_downsample",  # alias for psd_subsample
-    "ss": "n_downsample"  # alias for psd_subsample
+    "subsample": "n_downsample",
+    "sample": "frequency",
 }
+
+
+
+
 
 
 class Trace:
@@ -38,7 +40,7 @@ class Trace:
         #--- Settings
         self.hydrodynamics = 'none'   # Hydrodynamics correction mode
         self.plot = True              # Toggle plotting of fit progress     
-        self.f_generate = 1e7         # Generate PSDs up to this frequency (Hz)
+        self.oversampling_factor = 10 # Generate PSDs up to this factor above the original sampling frequency
         
         #--- Measured FDC data
         self.force = np.empty(1)      # Uncorrected force (pN); must be set for correction
@@ -87,7 +89,7 @@ class Trace:
         self.n_downsample = 1  # Downsampling factor of data
         self.n_boxcar = 1  # Window size of boxcar filter
         self.n_resampledown = 1
-        self.filters = ''  # Filters applied to signal; separated by ';'
+        self.filters = ''  # Filters applied to signal; separated by ';' #FIXME
         self.fit_counter = 0  # Keep track of fit iterations
         self.db447x = psd_filter.load_db477x()  # Filter values for NI DB447x filter
         self.bead = 0  # Bead selection
@@ -133,6 +135,10 @@ class Trace:
 
         df_dx = central_diff(f_corr, ext_corr)
 
+        f_sample, total_oversampling_factor = psd_filter.check_filters(FILTER_DICT, self.filters)
+        f_generate = self.oversampling_factor * f_sample
+        print(f"Generating PSD at {f_generate/1000:.3f} kHz.")
+
         calc_sigma = np.zeros_like(force)
         kappa1 = np.pi * force * k_dagger1/(2*beta_dagger * k_dagger * k1_app * width1)
         kappa2 = np.pi * force * k_dagger2/(2*beta_dagger * k_dagger * k2_app * width2)
@@ -140,9 +146,10 @@ class Trace:
         k2_eff = k2_app / k_dagger2 * np.sqrt(1 - (kappa2**2))
         beta_dagger_total1 = beta_dagger1 * np.sqrt(1 - (kappa1**2))
         beta_dagger_total2 = beta_dagger2 * np.sqrt(1 - (kappa2**2))
-        pool = mp.Pool(processes=4)
-        psd_orig = pool.starmap(psd_filter.psd_generate, [(k1_eff[i], k2_eff[i], df_dx[i], self.f_generate, beta_dagger_total1[i], beta_dagger_total2[i], ext_corr[i], self.bead_diameter1, self.bead_diameter2, self.hydrodynamics, bead) for i in range(len(calc_sigma))])
-        calc_sigma = pool.starmap(psd_filter.parse_filter, [(psd_orig[i], self.parameters, FILTER_DICT, self.filters) for i in range(len(calc_sigma))])
+        pool = mp.Pool(processes=4) #FIXME
+        psd_orig = pool.starmap(psd_filter.psd_generate, [(k1_eff[i], k2_eff[i], df_dx[i], f_generate, beta_dagger_total1[i], beta_dagger_total2[i], ext_corr[i], self.bead_diameter1, self.bead_diameter2, self.hydrodynamics, bead) for i in range(len(calc_sigma))])
+        #calc_sigma = pool.starmap(psd_filter.parse_filter, [(psd_orig[i], self.parameters, FILTER_DICT, self.filters) for i in range(len(calc_sigma))])
+        calc_sigma = pool.starmap(psd_filter.apply_filters, [(psd_orig[i], FILTER_DICT, self.filters) for i in range(len(calc_sigma))])
         pool.close()
         pool.join()
         self.ext_orig = dist - self.force / self.kc_app
@@ -313,11 +320,12 @@ class Trace:
         except KeyError:
             pass
 
-    def read_filter(self, filter_string: str):
+    def read_filter_string(self, filter_string: str):
         filter_list = filter_string.lower().split(";")
         filters = [x.split(',')[0] for x in filter_list]
         parameters = [x.split(',')[1] if len(x.split('1'))>1 else '' for x in filter_list]
         param_dict = {}
+        print(parameters)
         for i, filter in enumerate(filters):
             if parameters[i]!='':
                 param_dict[filter_params[filter]] = float(parameters[i])
@@ -339,7 +347,7 @@ class Trace:
         return ret_string
 
 
-def correction(filename: str, k1_app: float, k2_app: float, filters: str = "", sheet: str = ""):
+def correction(filename: str, k1_app: float, k2_app: float, filters: list, sheet: str = ""):
     """
     Loads data, parses filter and runs correction
     :param filename:  File that contains data to be corrected; allowed extensions: *.csv, *.xlsx
@@ -373,8 +381,9 @@ def correction(filename: str, k1_app: float, k2_app: float, filters: str = "", s
         trace.stdev_mob = data.iloc[:, 6]
     except KeyError:
         pass
-    # Parse filters
-    trace.read_filter(filters)
+    ## Parse filters
+    #trace.read_filter_string(filters)
+    trace.filters = filters
     # Correct
     print("start correction")
     trace.correct()

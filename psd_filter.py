@@ -1,7 +1,11 @@
 import numpy as np
 import pandas as pd
+import math
+
+
 
 # Set global constants
+OVERSAMPLING_FACTOR = 10
 KT = 1.38e-2 * 298 # kBT at room temperature in pN*nm
 ETA = 0.89e-9      # Shear viscosity of water in pN s / nm^2
 RHO = 0.99823e-21  # Density of water in pN s^2 nm^-4
@@ -12,6 +16,7 @@ def load_db477x() -> pd.core.frame.DataFrame:  # Load filter data for NI447x fil
     return pd.read_csv("dB447x.txt", sep="\t", index_col=0, header=None, names=None)  # ni447x filter
 
 
+#FIXME redundant
 def make_filter_params(db447x, n_downsample: int = 1, n_0: int = 4096, n_poles: int = 1, f_cutoff: int = 10000,
                        n_avg: int = 1, factor: int = 1):
     """
@@ -36,12 +41,70 @@ def make_filter_params(db447x, n_downsample: int = 1, n_0: int = 4096, n_poles: 
     }
 
 
+def check_filters(filter_dict: dict, filter_list: list):
+    """
+    Check if filter_list is ok.
+    :param filter_dict: FILTER_DICT linking the filter type to a function
+    :param filter_list: list of dicts {'type': str, 'par1': p1, 'par2', p2, ...}, with parameters
+    :return: f_sample, total_downsampling_factor
+    """
+    has_sample_stage = False
+    f_sample = None
+    subsample_factors = [1]
+
+    for filter in filter_list:
+        ftype = filter['type']
+        typekey, *fparameters = filter.keys()
+ 
+        if ftype not in filter_dict:
+            raise Exception("Unknown filter type: "+ftype)     
+        if ftype == 'sample':
+            has_sample_stage = True
+            f_sample = filter['frequency']
+        if ftype == 'subsample':
+            subsample_factors.append(fparameters['factor'])
+
+    if not has_sample_stage:
+        raise Exception("The filter description does not contain a sample stage")
+
+    total_factor = math.prod(subsample_factors)
+    if not float(total_factor).is_integer():
+        raise Exception("The total downsampling factor is not integer")
+
+    return f_sample, total_factor
+
+    
+
+def apply_filters(psd, filter_dict: dict, filter_list: list):
+    f_sample, total_downsampling_factor = check_filters(filter_dict, filter_list)
+    
+    for filter in filter_list:
+        ftype = filter['type']
+        typekey, *fparameters = filter.keys()
+
+        if ftype == 'sample':
+            psd = filter_dict[ftype](psd, {'factor': total_downsampling_factor*OVERSAMPLING_FACTOR})
+        else:
+            psd = filter_dict[ftype](psd, fparameters)
+
+    return np.sqrt(np.abs(np.trapz(psd, axis=0, x=psd.index)))
+
+    
+
+#FIXME will be redundant
 def parse_filter(psd, parameters: dict, filter_dict: dict, filter_string: str = "", sep=";"):
+    has_sample_stage = False
+
     filters = filter_string.split(sep=sep)
     if len(filters) != 0 and filters[0] != '':
         for filter_name in filters:
-            if filter_name != '':
-                psd = filter_dict[filter_name](psd, parameters)
+            if(filter_name == 'sample'):
+                has_sample_stage = True
+            psd = filter_dict[filter_name](psd, parameters)
+
+    if not has_sample_stage:
+        raise Exception("The filter string does not contain a sample stage")
+    
     return np.sqrt(np.abs(np.trapz(psd, axis=0, x=psd.index))) 
 
 
@@ -83,6 +146,9 @@ def bessel8(psd, parameters):
 
 
 def boxcar(psd, parameters):
+    """
+    Boxcar filter: Average by combining n_avg samples into one
+    """
     n_avg = parameters['n_avg']
     psd_filtered = psd.copy(deep=True)
     coefs_mag = psd.copy(deep=True)
@@ -98,6 +164,7 @@ def boxcar(psd, parameters):
     return psd_filtered
 
 
+#FIXME: poles!!!
 def butterworth(psd, parameters):
     f_cutoff = parameters['f_cutoff']
     coefs_mag = [1 / np.sqrt(1 + (coef / f_cutoff) ** 2) for coef in psd.index]
@@ -107,6 +174,9 @@ def butterworth(psd, parameters):
 
 
 def qpd(psd, parameters):
+    """
+    Filtering of a quadrant phododiode
+    """
     gam = 0.44
     f_0 = 11.1e3
     coefs_mag = [gam ** 2 + ((1 - gam ** 2) / (1 + (coef / f_0) ** 2)) for coef in psd.index]
@@ -121,8 +191,8 @@ def interpolate_psd(psd, n_downsample: int, n_0: int):
     """
     n_downsample = int(n_downsample)
     # Make placeholders
-    indices = [np.NaN] * ((n_0 * n_downsample) - n_downsample + 1)
-    values = [np.NaN] * ((n_0 * n_downsample) - n_downsample + 1)
+    indices = [np.nan] * ((n_0 * n_downsample) - n_downsample + 1)
+    values = [np.nan] * ((n_0 * n_downsample) - n_downsample + 1)
     # Fill data
     i = 0
     for x, val in psd.iterrows():
@@ -142,6 +212,9 @@ def interpolate_psd(psd, n_downsample: int, n_0: int):
 
 
 def psd_resample_down(psd, parameters):
+    """
+    Filtering as in Igor Pro resample operation
+    """
     factor = parameters['factor']
     coefs_mag = psd.copy(deep=True)
     max_freq = psd.index[-1]
@@ -178,6 +251,9 @@ def load_resample_coefs(factor: int):
 
 def psd_generate(k1, k2, k_d, f_sample_inf, beta_dagger1, beta_dagger2, mean_xi, diam1=1000, diam2=1000,
                  hydrodynamics='hansen rp', bead=0) -> pd.core.frame.DataFrame:
+    """
+    Generate a PSD at "infinite" bandwidth, given by f_sample_inf
+    """
     # Tested for Hansen RP + Bead=0
     gamma_1 = 6 * np.pi * ETA * diam1 / 2
     gamma_2 = 6 * np.pi * ETA * diam2 / 2
@@ -442,8 +518,11 @@ def psd_generate(k1, k2, k_d, f_sample_inf, beta_dagger1, beta_dagger2, mean_xi,
     return pd.DataFrame(data=theor_psd_calc, index=theor_psd)
 
 
-def psd_subsample(psd, parameters): 
-    n_downsample = parameters['n_downsample']
+def psd_subsample(psd, parameters):
+    """
+    Sub-sample a signal by decimation
+    """
+    n_downsample = parameters['factor']
     psd0 = psd.copy(deep=True)
     psd0['f'] = psd.index
     psd0.index = range(len(psd))
