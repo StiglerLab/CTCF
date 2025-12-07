@@ -20,10 +20,6 @@ FILTER_DICT = {'qpd': psd_filter.qpd,
                "subsample": psd_filter.psd_subsample}
 
 
-
-
-
-
 class Trace:
     def __init__(self):
         self.name = ""                # Used as an identifier in print statements
@@ -233,15 +229,18 @@ class Trace:
         self.k_dagger = (self.k_dagger1 / self.k1_app + self.k_dagger2 / self.k2_app) / (1 / self.kc_app)
         self.beta_dagger = (self.beta_dagger1 * self.k2_app * self.k_dagger1 + self.beta_dagger2 *
                             self.k1_app * self.k_dagger2) / (self.k2_app * self.k_dagger1 + self.k1_app * self.k_dagger2)
-        print(f"Corrected trace {self.name}.\n New calibration factors:"
-              f"\n beta_dagger1: {self.beta_dagger1}\n beta_dagger2: {self.beta_dagger2}\n"
-              f" k_dagger1: {self.k_dagger1}\n k_dagger2: {self.k_dagger2}\n"
-              f" beta_dagger: {self.beta_dagger}\n k_dagger:{self.k_dagger}")
+        print("Done with correction Corrected trace.")
+        print("Miscalibration factors:")
+        print(f"beta_dagger1: {self.beta_dagger1:.3f},   beta_dagger2: {self.beta_dagger2:.3f}")
+        print(f"k_dagger1:    {self.k_dagger1:.3f},   k_dagger2:    {self.k_dagger2:.3f}")
+        print(f"width1 (nm): {self.width1:6.1f},   width2 (nm): {self.width2:6.1f}")
+        print(f"beta_dagger:  {self.beta_dagger:.3f},   k_dagger:     {self.k_dagger:.3f}")
 
         # Re-calculate from final solution
-        self.compute_residuals(result.params, dist, stdev_data, force_data)
+        self.compute_residuals(result.params, dist, stdev_data, force_data, quiet=True)
         self.corrected = True
-        
+
+        # Show result after correction
         if self.plot:
             plt.figure()
             plt.plot(self.ext_orig, self.force, 'ko', mfc='white', label='1+2 orig')
@@ -256,12 +255,12 @@ class Trace:
             plt.ylabel('Force (pN)')
             plt.title('Correction result')
             plt.legend()
-            plt.ioff()
             plt.show()
+            plt.ioff()
 
 
 
-    def compute_residuals(self, params, dist, stdev_data, force_data):
+    def compute_residuals(self, params, dist, stdev_data, force_data, quiet=False):
         """
         Calculate total residual to minimize
         Calls calc_theor_sigma_var_kc
@@ -284,6 +283,7 @@ class Trace:
                 self.ratio_fitted = stdev_data[i,:] / calc_sigma.ravel()
                 self.calc_stdev = calc_sigma
                 if self.plot:
+                    plt.ion()
                     plt.clf()
                     plt.subplot(211)
                     plt.plot(dist, np.log2(self.ratio_fitted), 'ko', mfc='white')
@@ -322,6 +322,8 @@ class Trace:
             plt.legend()
             plt.draw()
             plt.pause(0.001)
+
+        if not quiet:
             print(f"{self.fit_counter:4d} {10**params['logbeta_dagger1'].value:.3f}, {10**params['logbeta_dagger2'].value:.3f}, {10**params['logk_dagger1'].value:.3f}, {10**params['logk_dagger2'].value:.3f}, {params['width1'].value:.3f}, {params['width2'].value:.3f}")
             self.fit_counter += 1
         return resid.flatten()
@@ -347,19 +349,6 @@ class Trace:
         except KeyError:
             pass
 
-    #FIXME Needed?
-    def read_filter_string(self, filter_string: str):
-        filter_list = filter_string.lower().split(";")
-        filters = [x.split(',')[0] for x in filter_list]
-        parameters = [x.split(',')[1] if len(x.split('1'))>1 else '' for x in filter_list]
-        param_dict = {}
-        print(parameters)
-        for i, filter in enumerate(filters):
-            if parameters[i]!='':
-                param_dict[filter_params[filter]] = float(parameters[i])
-        param_dict['db447x'] = self.db447x
-        self.filters = ';'.join(filters)
-        self.parameters = param_dict
 
     # Redefine __repr__ and __str__ methods
     def __repr__(self):
