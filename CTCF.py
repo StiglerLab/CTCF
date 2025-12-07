@@ -25,7 +25,7 @@ class Trace:
         self.name = ""                # Used as an identifier in print statements
 
         #--- Settings
-        self.hydrodynamics = 'hansen rp' # Hydrodynamics correction mode. Options: 'none', 'simple', 'hansen rp'
+        self.hydrodynamics = 'simple' # Hydrodynamics correction mode. Options: 'none', 'simple', 'hansen rp'
         self.plot = True              # Toggle plotting of fit progress     
         self.oversampling_factor = 10 # Generate PSDs up to this factor above the original sampling frequency
         
@@ -210,7 +210,7 @@ class Trace:
         for i, y in enumerate(force_data):
             fit_params.add(f'bead_{i}', value=i, vary=0)
             
-        result = minimize(self.compute_residuals, fit_params, args=(dist, stdev_data, force_data)) #max_nfev=10
+        result = minimize(self.compute_residuals, fit_params, args=(dist, stdev_data, force_data),max_nfev=10) #max_nfev=10
         
         self.beta_dagger1 = 10**result.params['logbeta_dagger1'].value
         self.beta_dagger2 = 10**result.params['logbeta_dagger2'].value
@@ -225,6 +225,14 @@ class Trace:
         self.beta_dagger = (self.beta_dagger1 * self.k2_app * self.k_dagger1 + self.beta_dagger2 *
                             self.k1_app * self.k_dagger2) / (self.k2_app * self.k_dagger1 + self.k1_app * self.k_dagger2)
         print("Done with correction Corrected trace.")
+
+        print("\nSettings:")
+        print("------------------------------------------------")
+        print(f"k1_app (pN/nm): {self.k1_app:.3f}, k2_app (pN/nm): {self.k2_app:.3f}")
+        print(f"diam1 (nm):     {self.bead_diameter1:4d},  diam2 (nm):     {self.bead_diameter2:4d}")
+        print(f"hydrodynamics:  {self.hydrodynamics}")
+        print(f"filters:        {self.filters}")
+        
         print("\nMiscalibration factors (1=mob, 2=fix):")
         print("------------------------------------------------")
         print(f"beta_dagger1: {self.beta_dagger1:.3f},   beta_dagger2: {self.beta_dagger2:.3f}")
@@ -354,6 +362,7 @@ class Trace:
         ret_string = (f"Trace {self.name}\n Calibration factors:"
                       f"\n beta_dagger1: {self.beta_dagger1}\n beta_dagger2: {self.beta_dagger2}\n"
                       f" k_dagger1: {self.k_dagger1}\n k_dagger2: {self.k_dagger2}\n"
+                      f" width1: {self.width1}\n width2: {self.width2}\n"
                       f" beta_dagger: {self.beta_dagger}\n k_dagger:{self.k_dagger}")
         if self.corrected:
             ret_string = f"Corrected " + ret_string
