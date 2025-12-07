@@ -169,6 +169,39 @@ class Trace:
         else:
             global_fit = False
         
+ 
+        if global_fit:
+            print("Running global fit to sum, mob, fix...")
+            stdev_data = np.vstack([self.stdev, self.stdev_mob, self.stdev_fix])
+            force_data = np.vstack([self.force, self.force_mob, self.force_fix])
+        else:
+            stdev_data = np.vstack([self.stdev])
+            force_data = np.vstack([self.force])
+        dist = np.array(self.dist.copy(deep=True))
+           
+        same_length = all(len(a) == len(stdev_data[0]) for a in stdev_data) and \
+            all(len(a) == len(force_data[0]) for a in force_data) and \
+            len(stdev_data[0]) == len(force_data[0])
+        if not same_length:
+            raise Exception("Data not same length")
+        
+        # Create parameters
+        fit_params = Parameters()
+        fit_params.add('k1_app', value=self.k1_app, vary=0)
+        fit_params.add('k2_app', value=self.k2_app, vary=0)
+        fit_params.add('logbeta_dagger1', value=np.log(self.beta_dagger1), min=np.log(0.5), max=np.log(2))
+        fit_params.add('logbeta_dagger2', value=np.log(self.beta_dagger2), min=np.log(0.5), max=np.log(2))
+        fit_params.add('logk_dagger1', value=np.log(self.k_dagger1), min=np.log(0.5), max=np.log(2))
+        fit_params.add('logk_dagger2', value=np.log(self.k_dagger2), min=np.log(0.5), max=np.log(2))
+        fit_params.add('width1', value=self.width1, min=20, max=5000)
+        fit_params.add('width2', value=self.width2, min=20, max=5000)
+        for i, y in enumerate(force_data):
+            fit_params.add(f'bead_{i}', value=i, vary=0)
+            
+        result = minimize(self.compute_residuals, fit_params, args=(dist, stdev_data, force_data))
+        
+        print("END") #FIXME: end here, then recompute correction
+
         bead = self.bead
         if bead == 1:
             force = self.force_mob
@@ -176,102 +209,6 @@ class Trace:
             force = self.force_fix
         else:
             force = self.force
-
-
-        if global_fit:
-            print("Running global fit to sum, mob, fix...")
-            dist = np.array(self.dist.copy(deep=True))
-
-            stdev_data = np.vstack([self.stdev, self.stdev_mob, self.stdev_fix])
-
-            force_data = np.vstack([self.force, self.force_mob, self.force_fix])
-            
-            same_length = all(len(a) == len(stdev_data[0]) for a in stdev_data) and \
-                all(len(a) == len(force_data[0]) for a in force_data) and \
-                len(stdev_data[0]) == len(force_data[0])
-            if not same_length:
-                raise Exception("Data not same length")
-
-            # Create parameters
-            fit_params = Parameters()
-            fit_params.add('k1_app', value=self.k1_app, vary=0)
-            fit_params.add('k2_app', value=self.k2_app, vary=0)
-            fit_params.add('logbeta_dagger1', value=np.log(self.beta_dagger1), min=np.log(0.5), max=np.log(2))
-            fit_params.add('logbeta_dagger2', value=np.log(self.beta_dagger2), min=np.log(0.5), max=np.log(2))
-            fit_params.add('logk_dagger1', value=np.log(self.k_dagger1), min=np.log(0.5), max=np.log(2))
-            fit_params.add('logk_dagger2', value=np.log(self.k_dagger2), min=np.log(0.5), max=np.log(2))
-            fit_params.add('width1', value=self.width1, min=20, max=5000)
-            fit_params.add('width2', value=self.width2, min=20, max=5000)
-            for i, y in enumerate(force_data):
-                fit_params.add(f'bead_{i}', value=i, vary=0)
-                
-
-            # Fit
-            def objective(params, dist, stdev_data, force_data):
-                """ Calculate total residual to minimize """
-        
-                ndata, nx = stdev_data.shape
-                resid = np.zeros_like(stdev_data)
-                # One residual per sum, mob, fix
-                for i in range(ndata):
-                    calc_sigma = self.calc_theor_sigma_var_kc(force_data[i,:],dist,
-                                                       params['k1_app'].value, params['k2_app'].value,
-                                                       10**params['logbeta_dagger1'].value, 10**params['logbeta_dagger2'].value,
-                                                       10**params['logk_dagger1'].value, 10**params['logk_dagger2'].value,
-                                                       params['width1'].value, params['width2'].value,
-                                                       params[f'bead_{i}'].value)
-                    calc_sigma = np.asanyarray(calc_sigma).reshape(-1)
-                    resid[i,:] = stdev_data[i,:] - calc_sigma
-
-                    if i==0: #sum
-                        self.ratio_fitted = stdev_data[i,:] / calc_sigma.ravel()
-                        self.calc_stdev = calc_sigma
-
-                        plt.clf()
-                        plt.subplot(211)
-                        plt.plot(dist, np.log2(self.ratio_fitted), 'ko', mfc='white')
-                        plt.ylabel('log2(Measured/Fitted)')
-                        plt.axhline(y=0, color='k')
-                        low, high = plt.ylim()
-                        bound = max(abs(low), abs(high))
-                        plt.ylim(-bound, bound)
-                        
-                        plt.subplot(212)
-                        plt.plot(dist, self.stdev, 'ko', mfc='white', label='1+2 Measured')
-                        plt.plot(dist, self.calc_stdev, 'k-',label='1+2 Fitted')
-                        plt.xlabel('Distance (nm)')
-                        plt.ylabel(r'$\sigma$ (nm)')
-                    if i==1:
-                        self.ratio_fitted_mob = stdev_data[i,:] / calc_sigma.ravel()
-                        self.calc_stdev_mob = calc_sigma
-                        plt.subplot(211)
-                        plt.plot(dist, np.log2(self.ratio_fitted_mob), 'go', mfc='white')
-                        plt.subplot(212)
-                        plt.plot(dist, self.stdev_mob, 'go', mfc='white', label='1 Measured')
-                        plt.plot(dist, self.calc_stdev_mob, 'g-',label='1 Fitted')
-                    if i==2:
-                        self.ratio_fitted_fix = stdev_data[i,:] / calc_sigma.ravel()
-                        self.calc_stdev_fix = calc_sigma
-                        plt.subplot(211)
-                        plt.plot(dist, np.log2(self.ratio_fitted_fix), 'ro', mfc='white')
-                        plt.subplot(212)
-                        plt.plot(dist, self.stdev_fix, 'ro', mfc='white', label='2 Measured')
-                        plt.plot(dist, self.calc_stdev_fix, 'r-',label='2 Fitted')
-  
-                        
-                plt.legend()
-                plt.draw()
-                plt.pause(0.001)
-                print(f"{self.fit_counter:4d} {10**params['logbeta_dagger1'].value:.3f}, {10**params['logbeta_dagger2'].value:.3f}, {10**params['logk_dagger1'].value:.3f}, {10**params['logk_dagger2'].value:.3f}, {params['width1'].value:.3f}, {params['width2'].value:.3f}")
-
-                return resid.flatten()
-            
-            result = minimize(objective, fit_params, args=(dist, stdev_data, force_data))
-
-            # run the global fit to all the data sets
-            #result = minimize(objective, fit_params, args=(x, data))
-            #report_fit(result)
-            print("END")
             
         
         sigma = self.calc_theor_sigma_var_kc(force, self.dist, self.k1_app, self.k2_app, self.beta_dagger1, self.beta_dagger2, self.k_dagger1, self.k_dagger2, self.width1, self.width2, bead)
@@ -401,6 +338,70 @@ class Trace:
         self.fit_counter += 1
         # return fitted sigma as yw
         return yw
+
+
+    # Fit #FIXME: replace old fit function in class with this
+    def compute_residuals(self, params, dist, stdev_data, force_data):
+        """ Calculate total residual to minimize """
+        
+        ndata, nx = stdev_data.shape
+        resid = np.zeros_like(stdev_data)
+        # One residual per sum, mob, fix
+        for i in range(ndata):
+            calc_sigma = self.calc_theor_sigma_var_kc(force_data[i,:],dist,
+                                                      params['k1_app'].value, params['k2_app'].value,
+                                                      10**params['logbeta_dagger1'].value, 10**params['logbeta_dagger2'].value,
+                                                      10**params['logk_dagger1'].value, 10**params['logk_dagger2'].value,
+                                                      params['width1'].value, params['width2'].value,
+                                                      params[f'bead_{i}'].value)
+            calc_sigma = np.asanyarray(calc_sigma).reshape(-1)
+            resid[i,:] = stdev_data[i,:] - calc_sigma
+            
+            if i==0: #sum
+                self.ratio_fitted = stdev_data[i,:] / calc_sigma.ravel()
+                self.calc_stdev = calc_sigma
+                if self.plot:
+                    plt.clf()
+                    plt.subplot(211)
+                    plt.plot(dist, np.log2(self.ratio_fitted), 'ko', mfc='white')
+                    plt.ylabel('log2(Measured/Fitted)')
+                plt.axhline(y=0, color='k')
+                low, high = plt.ylim()
+                bound = max(abs(low), abs(high))
+                plt.ylim(-bound, bound)                 
+                plt.subplot(212)
+                plt.plot(dist, self.stdev, 'ko', mfc='white', label='1+2 Measured')
+                plt.plot(dist, self.calc_stdev, 'k-',label='1+2 Fitted')
+                plt.xlabel('Distance (nm)')
+                plt.ylabel(r'$\sigma$ (nm)')
+            if i==1: #mob
+                self.ratio_fitted_mob = stdev_data[i,:] / calc_sigma.ravel()
+                self.calc_stdev_mob = calc_sigma
+                if self.plot:
+                    plt.subplot(211)
+                    plt.plot(dist, np.log2(self.ratio_fitted_mob), 'go', mfc='white')
+                    plt.subplot(212)
+                    plt.plot(dist, self.stdev_mob, 'go', mfc='white', label='1 Measured')
+                    plt.plot(dist, self.calc_stdev_mob, 'g-',label='1 Fitted')
+            if i==2: #fix
+                self.ratio_fitted_fix = stdev_data[i,:] / calc_sigma.ravel()
+                self.calc_stdev_fix = calc_sigma
+                if self.plot:
+                    plt.subplot(211)
+                    plt.plot(dist, np.log2(self.ratio_fitted_fix), 'ro', mfc='white')
+                    plt.subplot(212)
+                    plt.plot(dist, self.stdev_fix, 'ro', mfc='white', label='2 Measured')
+                    plt.plot(dist, self.calc_stdev_fix, 'r-',label='2 Fitted')
+                    
+        if self.plot:
+            plt.legend()
+            plt.draw()
+            plt.pause(0.001)
+            print(f"{self.fit_counter:4d} {10**params['logbeta_dagger1'].value:.3f}, {10**params['logbeta_dagger2'].value:.3f}, {10**params['logk_dagger1'].value:.3f}, {10**params['logk_dagger2'].value:.3f}, {params['width1'].value:.3f}, {params['width2'].value:.3f}")
+            self.fit_counter += 1
+        return resid.flatten()
+
+    
 
     # FIXME Headers?
     def load_from_csv(self, path: str,):
