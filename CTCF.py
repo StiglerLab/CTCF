@@ -25,7 +25,7 @@ class Trace:
         self.name = ""                # Used as an identifier in print statements
 
         #--- Settings
-        self.hydrodynamics = 'hansen rp'# Hydrodynamics correction mode
+        self.hydrodynamics = 'hansen rp' # Hydrodynamics correction mode. Options: 'none', 'simple', 'hansen rp'
         self.plot = True              # Toggle plotting of fit progress     
         self.oversampling_factor = 10 # Generate PSDs up to this factor above the original sampling frequency
         
@@ -65,9 +65,7 @@ class Trace:
         self.ext_orig = None          # Original extension data (nm)
         self.ext_corr = None          # Corrected extension data (nm)
         self.force_corr = None        # Corrected force data (pN)
-        self.ext_orig_mob = None      # Original extension data (nm)
         self.force_corr_mob = None    # Corrected force data (pN)
-        self.ext_orig_fix = None      # Original extension data (nm)
         self.force_corr_fix = None    # Corrected force data (pN)
        
 
@@ -83,7 +81,6 @@ class Trace:
         self.filters = []  # Filters applied to signal
         self.fit_counter = 0  # Keep track of fit iterations
         self.db447x = psd_filter.load_db477x()  # Filter values for NI DB447x filter
-        self.bead = 0  # Bead selection
         self.parameters = {}  # Dictionary for filter parameters
 
         
@@ -102,7 +99,7 @@ class Trace:
         :param k_dagger2: Correction factor k_dagger for trap 2
         :param width1: Non-harmonicity parmeter for trap 1 (nm)
         :param width2: Non-harmonicity parmeter for trap 2 (nm)
-        :param bead: Bead selection for calculation; default = 0: both beads #FIXME unused
+        :param bead: Bead selection for calculation; default = 0: both beads, only used for storing data where it belongs
         :return: Theoretical noise sigma
         """
         if len(force) != len(dist):
@@ -148,12 +145,10 @@ class Trace:
         print("PERF", time.perf_counter()-t1)
 
         self.ext_orig = self.dist - self.force / self.kc_app
-        self.ext_orig_mob = self.dist - self.force_mob / self.k1_app
-        self.ext_orig_fix = self.dist - self.force_fix / self.k2_app
  
         self.force_corr = f_corr.copy()
-        self.force_corr_mob = defl_corr1 * (self.k1_app*self.k_dagger1*self.beta_dagger1)
-        self.force_corr_fix = defl_corr2 * (self.k2_app*self.k_dagger2*self.beta_dagger2)
+        self.force_corr_mob = defl_corr1 * (self.k1_app / self.k_dagger1)
+        self.force_corr_fix = defl_corr2 * (self.k2_app / self.k_dagger2)
 
         self.ext_corr = self.dist - defl_corr1 - defl_corr2
 
@@ -184,7 +179,7 @@ class Trace:
         else:
             global_fit = False
 
-        global_fit = False
+        #global_fit = False
  
         if global_fit:
             print("Running global fit to sum, mob, fix...")
@@ -215,7 +210,7 @@ class Trace:
         for i, y in enumerate(force_data):
             fit_params.add(f'bead_{i}', value=i, vary=0)
             
-        result = minimize(self.compute_residuals, fit_params, args=(dist, stdev_data, force_data), max_nfev=10)
+        result = minimize(self.compute_residuals, fit_params, args=(dist, stdev_data, force_data)) #max_nfev=10
         
         self.beta_dagger1 = 10**result.params['logbeta_dagger1'].value
         self.beta_dagger2 = 10**result.params['logbeta_dagger2'].value
@@ -225,12 +220,13 @@ class Trace:
         self.width2 = result.params['width2'].value
 
         # Update self.k_dagger1, self.k_dagger2, self.beta_dagger1 and self.beta_dagger2 with fit values
-        self.kc_app = 1 / (1 / self.k1_app + self.k2_app)
+        self.kc_app = 1 / (1 / self.k1_app + 1 / self.k2_app)
         self.k_dagger = (self.k_dagger1 / self.k1_app + self.k_dagger2 / self.k2_app) / (1 / self.kc_app)
         self.beta_dagger = (self.beta_dagger1 * self.k2_app * self.k_dagger1 + self.beta_dagger2 *
                             self.k1_app * self.k_dagger2) / (self.k2_app * self.k_dagger1 + self.k1_app * self.k_dagger2)
         print("Done with correction Corrected trace.")
-        print("Miscalibration factors:")
+        print("\nMiscalibration factors (1=mob, 2=fix):")
+        print("------------------------------------------------")
         print(f"beta_dagger1: {self.beta_dagger1:.3f},   beta_dagger2: {self.beta_dagger2:.3f}")
         print(f"k_dagger1:    {self.k_dagger1:.3f},   k_dagger2:    {self.k_dagger2:.3f}")
         print(f"width1 (nm): {self.width1:6.1f},   width2 (nm): {self.width2:6.1f}")
@@ -246,10 +242,10 @@ class Trace:
             plt.plot(self.ext_orig, self.force, 'ko', mfc='white', label='1+2 orig')
             plt.plot(self.ext_corr, self.force_corr, 'ko', mfc='k', label='1+2 corr')
             if global_fit:
-                plt.plot(self.ext_orig_mob, self.force_mob, 'go', mfc='white', label='1 orig')
-                plt.plot(self.ext_corr,     self.force_corr_mob, 'go', mfc='g', label='1 corr')
-                plt.plot(self.ext_orig_fix, self.force_fix, 'ro', mfc='white', label='2 orig')
-                plt.plot(self.ext_corr,     self.force_corr_fix, 'ro', mfc='r', label='2 corr')
+                plt.plot(self.ext_orig, self.force_mob, 'go', mfc='white', label='1 orig')
+                plt.plot(self.ext_corr, self.force_corr_mob, 'go', mfc='g', label='1 corr')
+                plt.plot(self.ext_orig, self.force_fix, 'ro', mfc='white', label='2 orig')
+                plt.plot(self.ext_corr, self.force_corr_fix, 'ro', mfc='r', label='2 corr')
                 
             plt.xlabel('Extension (nm)')
             plt.ylabel('Force (pN)')
