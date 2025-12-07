@@ -70,10 +70,8 @@ class Trace:
         self.ext_corr = None          # Corrected extension data (nm)
         self.force_corr = None        # Corrected force data (pN)
         self.ext_orig_mob = None      # Original extension data (nm)
-        self.ext_corr_mob = None      # Corrected extension data (nm)
         self.force_corr_mob = None    # Corrected force data (pN)
         self.ext_orig_fix = None      # Original extension data (nm)
-        self.ext_corr_fix = None      # Corrected extension data (nm)
         self.force_corr_fix = None    # Corrected force data (pN)
        
 
@@ -108,7 +106,7 @@ class Trace:
         :param k_dagger2: Correction factor k_dagger for trap 2
         :param width1: Non-harmonicity parmeter for trap 1 (nm)
         :param width2: Non-harmonicity parmeter for trap 2 (nm)
-        :param bead: Bead selection for calculation; default = 0: both beads
+        :param bead: Bead selection for calculation; default = 0: both beads #FIXME unused
         :return: Theoretical noise sigma
         """
         if len(force) != len(dist):
@@ -145,27 +143,29 @@ class Trace:
         beta_dagger_total1 = beta_dagger1 * np.sqrt(1 - (kappa1**2))
         beta_dagger_total2 = beta_dagger2 * np.sqrt(1 - (kappa2**2))
 
-        pool = mp.Pool()
         t1 = time.perf_counter()
+        pool = mp.Pool()
         psd_orig = pool.starmap(psd_filter.psd_generate, [(k1_eff[i], k2_eff[i], df_dx[i], f_generate, beta_dagger_total1[i], beta_dagger_total2[i], ext_corr[i], self.bead_diameter1, self.bead_diameter2, self.hydrodynamics, bead) for i in range(len(calc_sigma))])
         calc_sigma = pool.starmap(psd_filter.apply_filters, [(psd_orig[i], FILTER_DICT, self.filters) for i in range(len(calc_sigma))])
-        print("PERF", time.perf_counter()-t1)
         pool.close()
         pool.join()
+        print("PERF", time.perf_counter()-t1)
+
+        self.ext_orig = self.dist - self.force / self.kc_app
+        self.ext_orig_mob = self.dist - self.force_mob / self.k1_app
+        self.ext_orig_fix = self.dist - self.force_fix / self.k2_app
+ 
+        self.force_corr = f_corr.copy()
+        self.force_corr_mob = defl_corr1 * (self.k1_app*self.k_dagger1*self.beta_dagger1)
+        self.force_corr_fix = defl_corr2 * (self.k2_app*self.k_dagger2*self.beta_dagger2)
+
+        self.ext_corr = self.dist - defl_corr1 - defl_corr2
+
         if bead==0:
-            self.ext_orig = self.dist - self.force / self.kc_app
-            self.force_corr = f_corr.copy()
-            self.ext_corr = ext_corr.copy()
             self.calc_sigma = calc_sigma
         if bead==1:
-            self.ext_orig_mob = self.dist - self.force_mob / self.k1_app
-            self.force_mob_corr = f_corr.copy()
-            self.ext_mob_corr = ext_corr.copy()
             self.calc_sigma_mob = calc_sigma
         if bead==2:
-            self.ext_orig_fix = self.dist - self.force_fix / self.k2_app
-            self.force_fix_corr = f_corr.copy()
-            self.ext_fix_corr = ext_corr.copy()
             self.calc_sigma_fix = calc_sigma
                    
         if np.isnan(calc_sigma).any():  # heavy penalization if NaNs are generated; prevents abort by Fit Error
@@ -188,7 +188,7 @@ class Trace:
         else:
             global_fit = False
 
-        #global_fit = False
+        global_fit = False
  
         if global_fit:
             print("Running global fit to sum, mob, fix...")
@@ -248,9 +248,9 @@ class Trace:
             plt.plot(self.ext_corr, self.force_corr, 'ko', mfc='k', label='1+2 corr')
             if global_fit:
                 plt.plot(self.ext_orig_mob, self.force_mob, 'go', mfc='white', label='1 orig')
-                plt.plot(self.ext_corr_mob, self.force_corr_mob, 'go', mfc='g', label='1 corr')
+                plt.plot(self.ext_corr,     self.force_corr_mob, 'go', mfc='g', label='1 corr')
                 plt.plot(self.ext_orig_fix, self.force_fix, 'ro', mfc='white', label='2 orig')
-                plt.plot(self.ext_corr_fix, self.force_corr_fix, 'ro', mfc='r', label='2 corr')
+                plt.plot(self.ext_corr,     self.force_corr_fix, 'ro', mfc='r', label='2 corr')
                 
             plt.xlabel('Extension (nm)')
             plt.ylabel('Force (pN)')
@@ -259,60 +259,6 @@ class Trace:
             plt.ioff()
             plt.show()
 
-                
-    #FIXME: needed?
-    def OBSOLETE_fit_sigma_filter(self, x, logbeta_dagger1, logbeta_dagger2, logk_dagger1, logk_dagger2, width1, width2, k1_app, k2_app, bead):
-        beta_dagger1 = 10**logbeta_dagger1
-        beta_dagger2 = 10**logbeta_dagger2
-        k_dagger1 = 10**logk_dagger1
-        k_dagger2 = 10**logk_dagger2
-        if bead == 1:
-            ext_std = self.stdev_mob.copy()
-            ext_force = self.force_mob.copy()
-        elif bead == 2:
-            ext_std = self.stdev_fix.copy()
-            ext_force = self.force_fix.copy()
-        else:
-            ext_std = self.stdev.copy()
-            ext_force = self.force.copy()
-        sigma = self.calc_theor_sigma_var_kc(ext_force, x, k1_app, k2_app, beta_dagger1, beta_dagger2, k_dagger1,
-                                             k_dagger2, width1=width1, width2=width2, bead=bead)
-
-        self.ratio_fitted = self.stdev / sigma.ravel()
-
-        sigma_masked = sigma.copy()
-        sigma_masked = np.array(sigma_masked * self.mask)
-        sigma_masked = sigma_masked[~np.isnan(sigma_masked)]  # remove NaN
- 
-        if len(sigma_masked) == len(sigma):
-            yw = sigma_masked.copy()
-        else:
-            yw = sigma.copy()
-
-        # Plot for visualization
-        if self.plot:
-            plt.clf()
-            plt.subplot(211)
-            plt.plot(x, np.log2(self.ratio_fitted), 'ko', mfc='white')
-            plt.ylabel('log2(Measured/Fitted)')
-            plt.axhline(y=0, color='k')
-            low, high = plt.ylim()
-            bound = max(abs(low), abs(high))
-            plt.ylim(-bound, bound)
-
-            plt.subplot(212)
-            plt.plot(x, self.stdev, 'ko', mfc='white', label='1+2 Measured')
-            plt.plot(x, yw, 'k-',label='1+2 Fitted')
-            plt.xlabel('Distance (nm)')
-            plt.ylabel(r'$\sigma$ (nm)')
-            plt.legend()
-            plt.draw()
-            plt.pause(0.001)
-        print(f"{self.fit_counter:4d} {beta_dagger1:.3f}, {beta_dagger2:.3f}, {k_dagger1:.3f}, {k_dagger2:.3f}, {width1:.3f}, {width2:.3f}")
-
-        self.fit_counter += 1
-        # return fitted sigma as yw
-        return yw
 
 
     def compute_residuals(self, params, dist, stdev_data, force_data):
