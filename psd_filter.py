@@ -103,7 +103,7 @@ def bessel8(psd, parameters):
     psd_filtered.iloc[:, 0] *= coefs_mag
     return psd_filtered
 
-
+#TODO: check
 def boxcar(psd, parameters):
     """
     Boxcar filter: Average by combining n_avg samples into one
@@ -266,7 +266,7 @@ def psd_generate(k1, k2, k_d, f_sample_inf, beta_dagger1, beta_dagger2, mean_xi,
         else:
             raise Exception(f'Invalid bead: {bead}')
         
-    elif hydrodynamics == 'simple':  # Simple hydrodynamics #FIXME: Vectorize everything below
+    elif hydrodynamics == 'simple':  # Simple hydrodynamics
         r_12 = diam1 / 2 + diam2 / 2 + mean_xi
         g = 4 * np.pi * ETA * r_12
         if bead == 0:
@@ -379,7 +379,7 @@ def psd_generate(k1, k2, k_d, f_sample_inf, beta_dagger1, beta_dagger2, mean_xi,
                 k2 + 2 * k_d))) * np.pi ** 2 + 16 * freq ** 4 * g ** 4 * v_g ** 2 * np.pi ** 4))
 
         elif bead == 1:
-            theor_psd_calc.append(2 * (2 * beta_dagger1 ** 2 * g * KT * (
+            theor_psd_calc = (2 * (2 * beta_dagger1 ** 2 * g * KT * (
                 -2 * g ** 2 * v_g * k_d * (k2 + k_d) + 2 * v_g ** 2 * k_d * (k2 + k_d) - g * v_g * (
                 gamma_2 * k_d ** 2 + gamma_1 * (k2 + k_d) ** 2) + g ** 3 * (
                 gamma_2 * k_d ** 2 + gamma_1 * (
@@ -392,7 +392,7 @@ def psd_generate(k1, k2, k_d, f_sample_inf, beta_dagger1, beta_dagger2, mean_xi,
                 k2 + k_d) ** 2) * np.pi ** 2 + 16 * freq ** 4 * v_g ** 2 * np.pi ** 4)))
 
         elif bead == 2:
-            theor_psd_calc.append(2 * (2 * beta_dagger2 ** 2 * g * KT * (
+            theor_psd_calc = (2 * (2 * beta_dagger2 ** 2 * g * KT * (
                 -2 * g ** 2 * v_g * k_d * (k1 + k_d) + 2 * v_g ** 2 * k_d * (k1 + k_d) - g * v_g * (
                 gamma_1 * k_d ** 2 + gamma_2 * (k1 + k_d) ** 2) + g ** 3 * (
                 gamma_1 * k_d ** 2 + gamma_2 * (

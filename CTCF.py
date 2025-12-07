@@ -3,7 +3,7 @@ import nonlinear_trap
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-from lmfit import Model
+from lmfit import Model, Parameters, minimize
 import multiprocessing as mp
 import time
 
@@ -29,19 +29,19 @@ class Trace:
         self.name = ""                # Used as an identifier in print statements
 
         #--- Settings
-        self.hydrodynamics = 'hansen rp'   # Hydrodynamics correction mode
+        self.hydrodynamics = 'hansen rp'# Hydrodynamics correction mode
         self.plot = True              # Toggle plotting of fit progress     
         self.oversampling_factor = 10 # Generate PSDs up to this factor above the original sampling frequency
         
         #--- Measured FDC data
-        self.force = np.empty(1)      # Uncorrected force (pN); must be set for correction
-        self.dist = np.empty(1)       # Distance (nm) corresponding to the force data; must be set for correction
-        self.stdev = np.empty(1)      # Standard deviation of total deflection signal (nm); must be set for correction
-
-        self.force_mob = np.empty(1)  # Uncorrected force (pN) from mobile trap
-        self.force_fix = np.empty(1)  # Uncorrected force (pN) from fixed trap
-        self.stdev_mob = np.empty(1)  # Standard deviation of deflection signal in mobile trap (nm)
-        self.stdev_fix = np.empty(1)  # Standard deviation of deflection signal in fixed trap (nm)
+        self.force = None             # Uncorrected force (pN); must be set for correction
+        self.dist = None              # Distance (nm) corresponding to the force data; must be set for correction
+        self.stdev = None             # Standard deviation of total deflection signal (nm); must be set for correction
+                                     
+        self.force_mob = None         # Uncorrected force (pN) from mobile trap
+        self.force_fix = None         # Uncorrected force (pN) from fixed trap
+        self.stdev_mob = None         # Standard deviation of deflection signal in mobile trap (nm)
+        self.stdev_fix = None         # Standard deviation of deflection signal in fixed trap (nm)
 
         self.mask = 1#FIXME np.empty(1)       # Masking array: same size as force, dist, etc. NaN values are excluded from fit
 
@@ -72,15 +72,15 @@ class Trace:
        
 
         #--- Internal stack for troubleshooting      
-        self.psd_orig = np.empty(1)    # PSD before filtering
-        self.calc_sigma = np.empty(1)  # Calculated noise
+        self.psd_orig = None    # PSD before filtering
+        self.calc_sigma = None  # Calculated noise
+        self.calc_sigma_mob = None
+        self.calc_sigma_fix = None
         self.ratio_fitted = None       # Ratio sigma_fit / sigma_exp
+        self.ratio_fitted_mob = None
+        self.ratio_fitted_fix = None
 
-        self.f_bessel = 1  # Cutoff for bessel filter
-        self.n_downsample = 1  # Downsampling factor of data
-        self.n_boxcar = 1  # Window size of boxcar filter
-        self.n_resampledown = 1
-        self.filters = ''  # Filters applied to signal; separated by ';' #FIXME
+        self.filters = []  # Filters applied to signal
         self.fit_counter = 0  # Keep track of fit iterations
         self.db447x = psd_filter.load_db477x()  # Filter values for NI DB447x filter
         self.bead = 0  # Bead selection
@@ -102,14 +102,15 @@ class Trace:
         :param width1: Non-harmonicity parmeter for trap 1 (nm)
         :param width2: Non-harmonicity parmeter for trap 2 (nm)
         :param bead: Bead selection for calculation; default = 0: both beads
-        :param filter_string: String containing the applied filters
         :return: Theoretical noise sigma
         """
+        if len(force) != len(dist):
+            raise Exception("Length of force data is not identical to dist data")
+        
         kc_app = 1 / (1 / k1_app + 1 / k2_app)
         k_dagger = (k_dagger1 / k1_app + k_dagger2 / k2_app) / (1 / kc_app)
         beta_dagger = (beta_dagger1 * k2_app * k_dagger1 + beta_dagger2 * k1_app * k_dagger2) / (
                     k2_app * k_dagger1 + k1_app * k_dagger2)
-        dist = self.dist.copy() #FIXME
         ext_corr, f_corr, defl_corr1, defl_corr2 = nonlinear_trap.correct_linker_soft_trap(force, dist, k1_app, k2_app,
                                                                                            beta_dagger1, beta_dagger2,
                                                                                            k_dagger1, k_dagger2, width1,
@@ -144,12 +145,10 @@ class Trace:
         print("PERF", time.perf_counter()-t1)
         pool.close()
         pool.join()
-        self.ext_orig = dist - self.force / self.kc_app
-        self.dist_orig = self.dist.copy() #FIXME
+        self.ext_orig = self.dist - self.force / self.kc_app
         self.force_corr = f_corr.copy()
         self.ext_corr = ext_corr.copy()
         self.calc_sigma = calc_sigma
-        dist_temp = dist.copy()        
         if np.isnan(calc_sigma).any():  # heavy penalization if NaNs are generated; prevents abort by Fit Error
             return 1e7*np.ones_like(force)
         return np.array(calc_sigma)
@@ -160,6 +159,15 @@ class Trace:
         Main method that's called for correction of miscalibration after data loading.
         Calls fit_sigma_filter method for correction.
         """
+
+        if self.force is None or self.dist is None:
+            raise Exception("No FDC")
+
+        #Check if we have mobile and fix data. If so, we can do a global fit (much better!)
+        if self.force_mob is not None and self.force_fix is not None and self.stdev_mob is not None and self.stdev_fix is not None:
+            global_fit = True
+        else:
+            global_fit = False
         
         bead = self.bead
         if bead == 1:
@@ -169,14 +177,110 @@ class Trace:
         else:
             force = self.force
 
-        if len(force) == 1 or len(self.dist) == 1:
-            raise Exception("No FDC")
+
+        if global_fit:
+            print("Running global fit to sum, mob, fix...")
+            dist = np.array(self.dist.copy(deep=True))
+
+            stdev_data = np.vstack([self.stdev, self.stdev_mob, self.stdev_fix])
+
+            force_data = np.vstack([self.force, self.force_mob, self.force_fix])
+            
+            same_length = all(len(a) == len(stdev_data[0]) for a in stdev_data) and \
+                all(len(a) == len(force_data[0]) for a in force_data) and \
+                len(stdev_data[0]) == len(force_data[0])
+            if not same_length:
+                raise Exception("Data not same length")
+
+            # Create parameters
+            fit_params = Parameters()
+            fit_params.add('k1_app', value=self.k1_app, vary=0)
+            fit_params.add('k2_app', value=self.k2_app, vary=0)
+            fit_params.add('logbeta_dagger1', value=np.log(self.beta_dagger1), min=np.log(0.5), max=np.log(2))
+            fit_params.add('logbeta_dagger2', value=np.log(self.beta_dagger2), min=np.log(0.5), max=np.log(2))
+            fit_params.add('logk_dagger1', value=np.log(self.k_dagger1), min=np.log(0.5), max=np.log(2))
+            fit_params.add('logk_dagger2', value=np.log(self.k_dagger2), min=np.log(0.5), max=np.log(2))
+            fit_params.add('width1', value=self.width1, min=20, max=5000)
+            fit_params.add('width2', value=self.width2, min=20, max=5000)
+            for i, y in enumerate(force_data):
+                fit_params.add(f'bead_{i}', value=i, vary=0)
+                
+
+            # Fit
+            def objective(params, dist, stdev_data, force_data):
+                """ Calculate total residual to minimize """
+        
+                ndata, nx = stdev_data.shape
+                resid = np.zeros_like(stdev_data)
+                # One residual per sum, mob, fix
+                for i in range(ndata):
+                    calc_sigma = self.calc_theor_sigma_var_kc(force_data[i,:],dist,
+                                                       params['k1_app'].value, params['k2_app'].value,
+                                                       10**params['logbeta_dagger1'].value, 10**params['logbeta_dagger2'].value,
+                                                       10**params['logk_dagger1'].value, 10**params['logk_dagger2'].value,
+                                                       params['width1'].value, params['width2'].value,
+                                                       params[f'bead_{i}'].value)
+                    calc_sigma = np.asanyarray(calc_sigma).reshape(-1)
+                    resid[i,:] = stdev_data[i,:] - calc_sigma
+
+                    if i==0: #sum
+                        self.ratio_fitted = stdev_data[i,:] / calc_sigma.ravel()
+                        self.calc_stdev = calc_sigma
+
+                        plt.clf()
+                        plt.subplot(211)
+                        plt.plot(dist, np.log2(self.ratio_fitted), 'ko', mfc='white')
+                        plt.ylabel('log2(Measured/Fitted)')
+                        plt.axhline(y=0, color='k')
+                        low, high = plt.ylim()
+                        bound = max(abs(low), abs(high))
+                        plt.ylim(-bound, bound)
+                        
+                        plt.subplot(212)
+                        plt.plot(dist, self.stdev, 'ko', mfc='white', label='1+2 Measured')
+                        plt.plot(dist, self.calc_stdev, 'k-',label='1+2 Fitted')
+                        plt.xlabel('Distance (nm)')
+                        plt.ylabel(r'$\sigma$ (nm)')
+                    if i==1:
+                        self.ratio_fitted_mob = stdev_data[i,:] / calc_sigma.ravel()
+                        self.calc_stdev_mob = calc_sigma
+                        plt.subplot(211)
+                        plt.plot(dist, np.log2(self.ratio_fitted_mob), 'go', mfc='white')
+                        plt.subplot(212)
+                        plt.plot(dist, self.stdev_mob, 'go', mfc='white', label='1 Measured')
+                        plt.plot(dist, self.calc_stdev_mob, 'g-',label='1 Fitted')
+                    if i==2:
+                        self.ratio_fitted_fix = stdev_data[i,:] / calc_sigma.ravel()
+                        self.calc_stdev_fix = calc_sigma
+                        plt.subplot(211)
+                        plt.plot(dist, np.log2(self.ratio_fitted_fix), 'ro', mfc='white')
+                        plt.subplot(212)
+                        plt.plot(dist, self.stdev_fix, 'ro', mfc='white', label='2 Measured')
+                        plt.plot(dist, self.calc_stdev_fix, 'r-',label='2 Fitted')
+  
+                        
+                plt.legend()
+                plt.draw()
+                plt.pause(0.001)
+                print(f"{self.fit_counter:4d} {10**params['logbeta_dagger1'].value:.3f}, {10**params['logbeta_dagger2'].value:.3f}, {10**params['logk_dagger1'].value:.3f}, {10**params['logk_dagger2'].value:.3f}, {params['width1'].value:.3f}, {params['width2'].value:.3f}")
+
+                return resid.flatten()
+            
+            result = minimize(objective, fit_params, args=(dist, stdev_data, force_data))
+
+            # run the global fit to all the data sets
+            #result = minimize(objective, fit_params, args=(x, data))
+            #report_fit(result)
+            print("END")
+            
         
         sigma = self.calc_theor_sigma_var_kc(force, self.dist, self.k1_app, self.k2_app, self.beta_dagger1, self.beta_dagger2, self.k_dagger1, self.k_dagger2, self.width1, self.width2, bead)
         #kc_app = 1 / (1 / self.k1_app + 1 / self.k2_app)
         self.k_dagger = (self.k_dagger1 / self.k1_app + self.k_dagger2 / self.k2_app) / (1 / self.kc_app)
-        self.beta_dagger = np.divide(self.beta_dagger1 * self.k2_app * self.k_dagger1 + self.beta_dagger2 * self.k1_app * self.k_dagger2,
-                                     self.k2_app * self.k_dagger1 + self.k1_app * self.k_dagger2)
+        self.beta_dagger = (self.beta_dagger1 * self.k2_app * self.k_dagger1 + self.beta_dagger2 * self.k1_app * self.k_dagger2) / (
+            self.k2_app * self.k_dagger1 + self.k1_app * self.k_dagger2)
+
+        
         x = self.dist.copy(deep=True)
         if bead == 1:  # set stdev according to bead mode
             y = self.stdev_mob
@@ -184,6 +288,10 @@ class Trace:
             y = self.stdev_fix
         else:
             y = self.stdev
+
+        if len(y) != len(self.dist):
+            raise Exception("Stdev data length incompatible with dist")
+            
         if self.plot:
             plt.plot(self.dist, self.stdev)
             plt.ion()
@@ -240,6 +348,7 @@ class Trace:
             plt.ioff()
             plt.show()
 
+    #FIXME: needed?
     def fit_sigma_filter(self, x, logbeta_dagger1, logbeta_dagger2, logk_dagger1, logk_dagger2, width1, width2, k1_app, k2_app, bead):
         beta_dagger1 = 10**logbeta_dagger1
         beta_dagger2 = 10**logbeta_dagger2
