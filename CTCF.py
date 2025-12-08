@@ -25,9 +25,8 @@ class Trace:
         self.name = ""                # Used as an identifier in print statements
 
         #--- Settings
-        self.hydrodynamics = 'simple' # Hydrodynamics correction mode. Options: 'none', 'simple', 'hansen rp'
+        self.hydrodynamics = 'rp'     # Hydrodynamics correction mode. Options: 'none', 'simple', 'rp'
         self.plot = True              # Toggle plotting of fit progress     
-        self.oversampling_factor = 10 # Generate PSDs up to this factor above the original sampling frequency
         
         #--- Measured FDC data
         self.force = None             # Uncorrected force (pN); must be set for correction
@@ -39,15 +38,15 @@ class Trace:
         self.stdev_mob = None         # Standard deviation of deflection signal in mobile trap (nm)
         self.stdev_fix = None         # Standard deviation of deflection signal in fixed trap (nm)
 
-        self.mask = 1#FIXME np.empty(1)       # Masking array: same size as force, dist, etc. NaN values are excluded from fit
+        self.mask = None              # Masking array: same size as force, dist, etc. NaN values are excluded from fit
 
         
         #--- Measured parameters
         self.bead_diameter1 = 1000    # Diameter of bead in mobile trap (nm)
         self.bead_diameter2 = 1000    # Diameter of bead in fixed trap (nm)
 
-        self.k1_app = .3              # Apparent spring constant of mobile trap before correction (pN/nm)
-        self.k2_app = .3              # Apparent spring constant of fixed trap before correction (pN/nm)
+        self.k1_app = np.nan          # Apparent spring constant of mobile trap before correction (pN/nm)
+        self.k2_app = np.nan          # Apparent spring constant of fixed trap before correction (pN/nm)
 
         #--- Outputs
         self.corrected = False        # Flag to indicate whether correction of the traces has been done
@@ -81,7 +80,6 @@ class Trace:
         self.filters = []  # Filters applied to signal
         self.fit_counter = 0  # Keep track of fit iterations
         self.db447x = psd_filter.load_db477x()  # Filter values for NI DB447x filter
-        self.parameters = {}  # Dictionary for filter parameters
 
         
     def calc_theor_sigma_var_kc(self, force, dist, k1_app, k2_app, beta_dagger1, beta_dagger2, k_dagger1, k_dagger2,
@@ -136,21 +134,21 @@ class Trace:
         beta_dagger_total1 = beta_dagger1 * np.sqrt(1 - (kappa1**2))
         beta_dagger_total2 = beta_dagger2 * np.sqrt(1 - (kappa2**2))
 
-        t1 = time.perf_counter()
+        #t1 = time.perf_counter()
         pool = mp.Pool()
         psd_orig = pool.starmap(psd_filter.psd_generate, [(k1_eff[i], k2_eff[i], df_dx[i], f_generate, beta_dagger_total1[i], beta_dagger_total2[i], ext_corr[i], self.bead_diameter1, self.bead_diameter2, self.hydrodynamics, bead) for i in range(len(calc_sigma))])
         calc_sigma = pool.starmap(psd_filter.apply_filters, [(psd_orig[i], FILTER_DICT, self.filters) for i in range(len(calc_sigma))])
         pool.close()
         pool.join()
-        print("PERF", time.perf_counter()-t1)
+        #print("PERF", time.perf_counter()-t1)
 
-        self.ext_orig = self.dist - self.force / self.kc_app
+        self.ext_orig = dist - force / self.kc_app
  
         self.force_corr = f_corr.copy()
         self.force_corr_mob = defl_corr1 * (self.k1_app / self.k_dagger1)
         self.force_corr_fix = defl_corr2 * (self.k2_app / self.k_dagger2)
 
-        self.ext_corr = self.dist - defl_corr1 - defl_corr2
+        self.ext_corr = dist - defl_corr1 - defl_corr2
 
         if bead==0:
             self.calc_sigma = calc_sigma
@@ -169,7 +167,14 @@ class Trace:
         Main method that's called for correction of miscalibration after data loading.
         Calls compute_residuals in minimizer for correction.
         """
-
+        print("\nSettings:")
+        print("------------------------------------------------")
+        print(f"k1_app (pN/nm): {self.k1_app:.3f}, k2_app (pN/nm): {self.k2_app:.3f}")
+        print(f"diam1 (nm):     {self.bead_diameter1:4d},  diam2 (nm):     {self.bead_diameter2:4d}")
+        print(f"hydrodynamics:  {self.hydrodynamics}")
+        print(f"filters:        {self.filters}")
+        
+ 
         if self.force is None or self.dist is None:
             raise Exception("No FDC")
 
@@ -196,6 +201,18 @@ class Trace:
             len(stdev_data[0]) == len(force_data[0])
         if not same_length:
             raise Exception("Data not same length")
+
+        # Masking
+        if self.mask is None:
+            force_data_masked = force_data
+            stdev_data_masked = stdev_data
+            dist_masked = dist
+        else:
+            if len(self.mask) != len(force_data[0]):
+                raise Exception("Mask not same length")
+            force_data_masked = force_data[:,~np.isnan(self.mask)]
+            stdev_data_masked = stdev_data[:,~np.isnan(self.mask)]
+            dist_masked = dist[~np.isnan(self.mask)]
         
         # Create parameters
         fit_params = Parameters()
@@ -210,7 +227,7 @@ class Trace:
         for i, y in enumerate(force_data):
             fit_params.add(f'bead_{i}', value=i, vary=0)
             
-        result = minimize(self.compute_residuals, fit_params, args=(dist, stdev_data, force_data),max_nfev=10) #max_nfev=10
+        result = minimize(self.compute_residuals, fit_params, args=(dist, stdev_data, force_data, self.mask))#,max_nfev=10)
         
         self.beta_dagger1 = 10**result.params['logbeta_dagger1'].value
         self.beta_dagger2 = 10**result.params['logbeta_dagger2'].value
@@ -224,15 +241,8 @@ class Trace:
         self.k_dagger = (self.k_dagger1 / self.k1_app + self.k_dagger2 / self.k2_app) / (1 / self.kc_app)
         self.beta_dagger = (self.beta_dagger1 * self.k2_app * self.k_dagger1 + self.beta_dagger2 *
                             self.k1_app * self.k_dagger2) / (self.k2_app * self.k_dagger1 + self.k1_app * self.k_dagger2)
-        print("Done with correction Corrected trace.")
+        print("\nDone with correction Corrected trace.")
 
-        print("\nSettings:")
-        print("------------------------------------------------")
-        print(f"k1_app (pN/nm): {self.k1_app:.3f}, k2_app (pN/nm): {self.k2_app:.3f}")
-        print(f"diam1 (nm):     {self.bead_diameter1:4d},  diam2 (nm):     {self.bead_diameter2:4d}")
-        print(f"hydrodynamics:  {self.hydrodynamics}")
-        print(f"filters:        {self.filters}")
-        
         print("\nMiscalibration factors (1=mob, 2=fix):")
         print("------------------------------------------------")
         print(f"beta_dagger1: {self.beta_dagger1:.3f},   beta_dagger2: {self.beta_dagger2:.3f}")
@@ -264,7 +274,7 @@ class Trace:
 
 
 
-    def compute_residuals(self, params, dist, stdev_data, force_data, quiet=False):
+    def compute_residuals(self, params, dist, stdev_data, force_data, mask=None, quiet=False):
         """
         Calculate total residual to minimize
         Calls calc_theor_sigma_var_kc
@@ -281,10 +291,16 @@ class Trace:
                                                       params['width1'].value, params['width2'].value,
                                                       params[f'bead_{i}'].value)
             calc_sigma = np.asanyarray(calc_sigma).reshape(-1)
+            ratio = stdev_data[i,:] / calc_sigma.ravel()
             resid[i,:] = stdev_data[i,:] - calc_sigma
+ 
+            # If masking is on: don't show ratio or calc_sigma for the masked points, and (FURTHER BELOW), remove the residuals
+            if mask is not None:
+                calc_sigma[np.isnan(mask)] = np.nan
+                ratio[np.isnan(mask)] = np.nan
             
             if i==0: #sum
-                self.ratio_fitted = stdev_data[i,:] / calc_sigma.ravel()
+                self.ratio_fitted = ratio
                 self.calc_stdev = calc_sigma
                 if self.plot:
                     plt.ion()
@@ -298,28 +314,28 @@ class Trace:
                     plt.ylim(-bound, bound)                 
                     plt.title("Residuals")
                     plt.subplot(212)
-                    plt.plot(dist, self.stdev, 'ko', mfc='white', label='1+2 Measured')
+                    plt.plot(dist, stdev_data[i,:], 'ko', mfc='white', label='1+2 Measured')
                     plt.plot(dist, self.calc_stdev, 'k-',label='1+2 Fitted')
                     plt.xlabel('Distance (nm)')
                     plt.ylabel(r'$\sigma$ (nm)')
                     plt.title("Noise fitting")
             if i==1: #mob
-                self.ratio_fitted_mob = stdev_data[i,:] / calc_sigma.ravel()
+                self.ratio_fitted_mob = ratio
                 self.calc_stdev_mob = calc_sigma
                 if self.plot:
                     plt.subplot(211)
                     plt.plot(dist, np.log2(self.ratio_fitted_mob), 'go', mfc='white')
                     plt.subplot(212)
-                    plt.plot(dist, self.stdev_mob, 'go', mfc='white', label='1 Measured')
+                    plt.plot(dist, stdev_data[i,:], 'go', mfc='white', label='1 Measured')
                     plt.plot(dist, self.calc_stdev_mob, 'g-',label='1 Fitted')
             if i==2: #fix
-                self.ratio_fitted_fix = stdev_data[i,:] / calc_sigma.ravel()
+                self.ratio_fitted_fix = ratio
                 self.calc_stdev_fix = calc_sigma
                 if self.plot:
                     plt.subplot(211)
                     plt.plot(dist, np.log2(self.ratio_fitted_fix), 'ro', mfc='white')
                     plt.subplot(212)
-                    plt.plot(dist, self.stdev_fix, 'ro', mfc='white', label='2 Measured')
+                    plt.plot(dist, stdev_data[i,:], 'ro', mfc='white', label='2 Measured')
                     plt.plot(dist, self.calc_stdev_fix, 'r-',label='2 Fitted')
                     
         if self.plot:
@@ -328,8 +344,12 @@ class Trace:
             plt.pause(0.001)
 
         if not quiet:
-            print(f"{self.fit_counter:4d} {10**params['logbeta_dagger1'].value:.3f}, {10**params['logbeta_dagger2'].value:.3f}, {10**params['logk_dagger1'].value:.3f}, {10**params['logk_dagger2'].value:.3f}, {params['width1'].value:.3f}, {params['width2'].value:.3f}")
+            print(f"ITERATION {self.fit_counter:4d}: {10**params['logbeta_dagger1'].value:.3f}, {10**params['logbeta_dagger2'].value:.3f}, {10**params['logk_dagger1'].value:.3f}, {10**params['logk_dagger2'].value:.3f}, {params['width1'].value:.3f}, {params['width2'].value:.3f}", end="\r")
             self.fit_counter += 1
+
+        if mask is not None:
+            resid = resid[:,~np.isnan(mask)]
+
         return resid.flatten()
 
     
@@ -396,13 +416,25 @@ def correction(filename: str, k1_app: float, k2_app: float, filters: list, sheet
     trace.force = data.iloc[:, 0]
     trace.stdev = data.iloc[:, 1]
     trace.dist = data.iloc[:, 2]
+
+    has_mobfix_data = False
     try:  # Load data for individual traps if available
         trace.force_fix = data.iloc[:, 3]
         trace.force_mob = data.iloc[:, 4]
         trace.stdev_fix = data.iloc[:, 5]
         trace.stdev_mob = data.iloc[:, 6]
+        has_mobifx_data = True
     except KeyError:
         pass
+
+    try:
+        if has_mobifx_data:
+            trace.mask = data.iloc[:, 7]
+        else:
+            trace.mask = data.iloc[:, 4]
+    except KeyError:
+        pass
+        
     ## Parse filters
     #trace.read_filter_string(filters)
     trace.filters = filters
