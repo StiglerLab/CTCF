@@ -421,7 +421,7 @@ def correction(filename: str, k1_app: float, k2_app: float, filters: list, sheet
         trace.stdev_mob = data.iloc[:, 5]
         trace.stdev_fix = data.iloc[:, 6]
         has_mobfix_data = True
-    except KeyError:
+    except IndexError:
         pass
 
     try:
@@ -429,7 +429,7 @@ def correction(filename: str, k1_app: float, k2_app: float, filters: list, sheet
             trace.mask = data.iloc[:, 7]
         else:
             trace.mask = data.iloc[:, 4]
-    except KeyError:
+    except IndexError:
         pass
         
     ## Parse filters
