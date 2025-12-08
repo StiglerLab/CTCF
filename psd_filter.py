@@ -12,9 +12,6 @@ RHO = 0.99823e-21  # Density of water in pN s^2 nm^-4
 NU = ETA / RHO     # kinematic viscosity
 
 
-def load_db477x() -> pd.core.frame.DataFrame:  # Load filter data for NI447x filter
-    return pd.read_csv("dB447x.txt", sep="\t", index_col=0, header=None, names=None)  # ni447x filter
-
 
 
 def check_filters(filter_dict: dict, filter_list: list):
@@ -52,6 +49,7 @@ def check_filters(filter_dict: dict, filter_list: list):
     
 
 def apply_filters(psd, filter_dict: dict, filter_list: list):
+    """ Apply filters to a PSD and return the signal stdev """
     f_sample, total_downsampling_factor = check_filters(filter_dict, filter_list)
     
     for filter in filter_list:
@@ -64,28 +62,23 @@ def apply_filters(psd, filter_dict: dict, filter_list: list):
 
     return np.sqrt(np.abs(np.trapz(psd, axis=0, x=psd.index)))
 
+
+
+def filter_ni447x(psd, parameters):
+    db = np.array([0.0000, -0.0419, -0.0508, -0.0684, -0.1552, -0.2763, -0.4664, -0.7599,
+                   -1.1740, -1.6052, -2.1999, -2.6998, -3.3890, -4.0177, -4.6894, -5.2577,
+                   -5.9896, -10.4523, -17.8894, -28.5427, -52.8643, -88.2412, -117.3869])
     
-
-def apply_ni447x(row, db447x):
-    if row.name < db447x.index[0]:
-        row[0] = 1
-    elif row.name > db447x.index[-1]:
-        row[0] = 0
-    else:
-        res = 10 ** (db447x.iloc[db447x.index.get_loc(row.name, method='nearest')] / 20)
-        row[0] = res.values[0]
-
-
-def ni447x(psd, parameters):
-    db447x = parameters['db447x']
-    coefs_mag = psd.copy()
-    coefs_mag.apply(apply_ni447x, axis=1, args=[db447x])
-    psd_filtered = psd * coefs_mag ** 2
+    freq = np.array([35429.7, 35939.8, 36040.9, 36160.3, 36380.9, 36560.1, 36799.0, 37051.6,
+                     37341.0, 37566.0, 37813.9, 37979.2, 38153.6, 38259.0, 38332.3, 38382.6,
+                     38509.7, 39127.8, 39621.1, 40051.5, 40849.2, 42201.1, 43307.2])
+    
+    psd_filtered = psd * 10**(np.interp(psd.index.values, freq, db, left=db[0], right=db[-1])[:, None] / 10)
     return psd_filtered
 
 
 #TODO: optimize
-def bessel8(psd, parameters):
+def filter_bessel8(psd, parameters):
     f_cutoff = parameters['f_cutoff']
     f_mod = f_cutoff / 3.17962
     coefs_mag = psd.copy()
@@ -123,7 +116,7 @@ def boxcar_BUGGY(psd, parameters):
     return psd_filtered
 
 
-def boxcar(psd, parameters):
+def filter_boxcar(psd, parameters):
     """
     Boxcar filter: Average by combining n_avg samples into one
     """
@@ -150,10 +143,10 @@ def boxcar(psd, parameters):
     H2[~small] = (1 / N**2) * (num[~small] / den[~small])**2
 
     psd_out = psd_vals * H2
-    return pd.Series(psd_out, index=psd.index)
+    return pd.Dataframe(psd_out, index=psd.index)
 
 
-def butterworth(psd, parameters):
+def filter_butterworth(psd, parameters):
     f_cutoff = parameters['f_cutoff']
     n_poles = parameters['n_poles']
     coefs_mag = [1 / np.sqrt(1 + (coef / f_cutoff) ** (2*n_poles)) for coef in psd.index]
@@ -162,7 +155,7 @@ def butterworth(psd, parameters):
     return psd_filtered
 
 
-def qpd(psd, parameters):
+def filter_qpd(psd, parameters):
     """
     Filtering of a quadrant phododiode
     """
@@ -175,7 +168,7 @@ def qpd(psd, parameters):
     return psd_filtered
 
 
-def psd(psd, parameters):
+def filter_psd(psd, parameters):
     """
     Filtering of a position-sensitive device like the DL100-7
     """
@@ -216,7 +209,7 @@ def interpolate_psd(psd, n_downsample: int, n_0: int):
 
 
 # Untested
-def psd_resample_down(psd, parameters):
+def filter_psd_resample_down(psd, parameters):
     """
     Filtering as in Igor Pro resample operation
     """

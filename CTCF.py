@@ -9,14 +9,14 @@ import time
 
 
 # Dictionary for parsing filters; append keys and filter functions to add custom filters
-FILTER_DICT = {'qpd': psd_filter.qpd,
-               'psd': psd_filter.psd,
-               'bessel8': psd_filter.bessel8,
-               'butterworth': psd_filter.butterworth,
+FILTER_DICT = {'qpd': psd_filter.filter_qpd,
+               'psd': psd_filter.filter_psd,
+               'bessel8': psd_filter.filter_bessel8,
+               'butterworth': psd_filter.filter_butterworth,
                'sample': psd_filter.psd_subsample,
-               'boxcar': psd_filter.boxcar,
-               'igorresample': psd_filter.psd_resample_down,
-               'ni447x': psd_filter.ni447x,
+               'boxcar': psd_filter.filter_boxcar,
+               'igorresample': psd_filter.filter_psd_resample_down,
+               'ni447x': psd_filter.filter_ni447x,
                "subsample": psd_filter.psd_subsample}
 
 
@@ -77,7 +77,6 @@ class Trace:
 
         self.filters = []  # Filters applied to signal
         self.fit_counter = 0  # Keep track of fit iterations
-        self.db447x = psd_filter.load_db477x()  # Filter values for NI DB447x filter
 
         
     def calc_theor_sigma_var_kc(self, force, dist, k1_app, k2_app, beta_dagger1, beta_dagger2, k_dagger1, k_dagger2,
@@ -138,6 +137,7 @@ class Trace:
         calc_sigma = pool.starmap(psd_filter.apply_filters, [(psd_orig[i], FILTER_DICT, self.filters) for i in range(len(calc_sigma))])
         pool.close()
         pool.join()
+        #calc_sigma = [psd_filter.apply_filters(psd_orig[i], FILTER_DICT, self.filters)for i in range(len(calc_sigma))]
         #print("PERF", time.perf_counter()-t1)
 
         self.ext_orig = dist - force / self.kc_app
