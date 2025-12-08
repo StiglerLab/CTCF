@@ -22,8 +22,6 @@ FILTER_DICT = {'qpd': psd_filter.qpd,
 
 class Trace:
     def __init__(self):
-        self.name = ""                # Used as an identifier in print statements
-
         #--- Settings
         self.hydrodynamics = 'rp'     # Hydrodynamics correction mode. Options: 'none', 'simple', 'rp'
         self.plot = True              # Toggle plotting of fit progress     
@@ -360,7 +358,6 @@ class Trace:
         Method for loading in data. Format: .csv file with force as $root_F, distance as $root_Dist and Stdev as $root_Stdev
         :param path: filepath of .csv file
         """
-        self.name = path.split('\\')[-1]
         data = pd.read_csv(path, sep=",")
         self.dist = data.loc[:, 'Distance']
         self.force = data.loc[:, 'Force']
@@ -376,16 +373,16 @@ class Trace:
 
     # Redefine __repr__ and __str__ methods
     def __repr__(self):
-        return f'Trace {self.name} ({len(self.force)} rows):\n{self.force} '
+        return f'Trace ({len(self.force)} rows):\n{self.force} '
 
     def __str__(self):
-        ret_string = (f"Trace {self.name}\n Calibration factors:"
+        ret_string = (f"Trace with miscalibration factors:"
                       f"\n beta_dagger1: {self.beta_dagger1}\n beta_dagger2: {self.beta_dagger2}\n"
                       f" k_dagger1: {self.k_dagger1}\n k_dagger2: {self.k_dagger2}\n"
                       f" width1: {self.width1}\n width2: {self.width2}\n"
                       f" beta_dagger: {self.beta_dagger}\n k_dagger:{self.k_dagger}")
         if self.corrected:
-            ret_string = f"Corrected " + ret_string
+            ret_string = ret_string + "\nCorrection is done."
         return ret_string
 
 
@@ -419,16 +416,16 @@ def correction(filename: str, k1_app: float, k2_app: float, filters: list, sheet
 
     has_mobfix_data = False
     try:  # Load data for individual traps if available
-        trace.force_fix = data.iloc[:, 3]
-        trace.force_mob = data.iloc[:, 4]
-        trace.stdev_fix = data.iloc[:, 5]
-        trace.stdev_mob = data.iloc[:, 6]
-        has_mobifx_data = True
+        trace.force_mob = data.iloc[:, 3]
+        trace.force_fix = data.iloc[:, 4]
+        trace.stdev_mob = data.iloc[:, 5]
+        trace.stdev_fix = data.iloc[:, 6]
+        has_mobfix_data = True
     except KeyError:
         pass
 
     try:
-        if has_mobifx_data:
+        if has_mobfix_data:
             trace.mask = data.iloc[:, 7]
         else:
             trace.mask = data.iloc[:, 4]
