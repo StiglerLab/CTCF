@@ -103,8 +103,8 @@ def bessel8(psd, parameters):
     psd_filtered.iloc[:, 0] *= coefs_mag
     return psd_filtered
 
-#TODO: check
-def boxcar(psd, parameters):
+#TODO: check #FIXME doesn't work
+def boxcar_BUGGY(psd, parameters):
     """
     Boxcar filter: Average by combining n_avg samples into one
     """
@@ -121,6 +121,36 @@ def boxcar(psd, parameters):
     coefs_mag.iloc[coefs_mag.index.get_loc(coefs_mag.index[0], method='nearest')] = 1
     psd_filtered = psd * coefs_mag ** 2
     return psd_filtered
+
+
+def boxcar(psd, parameters):
+    """
+    Boxcar filter: Average by combining n_avg samples into one
+    """
+    N = parameters['n_avg']      # number of points in the average
+    max_freq = psd.index[-1]  
+    fs = 2*max_freq              # sampling frequency (Hz)
+    T = 1 / fs                   # sampling interval
+
+    freqs = psd.index.values.astype(float).ravel()
+    psd_vals = psd.values.ravel()
+
+    omega = 2 * np.pi * freqs
+
+    # Frequency response of an N-point moving average
+    # |H(f)|^2 = (1/N^2) * (sin(NωT/2) / sin(ωT/2))^2
+
+    num = np.sin(omega * T * N / 2)
+    den = np.sin(omega * T / 2)
+
+    # Handle the limit at f = 0 (value should be 1)
+    H2 = np.zeros_like(freqs)
+    small = np.isclose(den, 0)
+    H2[small] = 1.0
+    H2[~small] = (1 / N**2) * (num[~small] / den[~small])**2
+
+    psd_out = psd_vals * H2
+    return pd.Series(psd_out, index=psd.index)
 
 
 def butterworth(psd, parameters):
@@ -158,7 +188,8 @@ def psd(psd, parameters):
     return psd_filtered
 
 
-def interpolate_psd(psd, n_downsample: int, n_0: int): #FIXME
+# Untested
+def interpolate_psd(psd, n_downsample: int, n_0: int):
     """
     Helper function for psd_subsample()
     """
@@ -184,7 +215,8 @@ def interpolate_psd(psd, n_downsample: int, n_0: int): #FIXME
     return temp_data
 
 
-def psd_resample_down(psd, parameters): #FIXME
+# Untested
+def psd_resample_down(psd, parameters):
     """
     Filtering as in Igor Pro resample operation
     """
@@ -224,12 +256,12 @@ def load_resample_coefs(factor: int):
 
 #TODO: This can be optimized for speed
 def psd_generate(k1, k2, k_d, f_sample_inf, beta_dagger1, beta_dagger2, mean_xi, diam1=1000, diam2=1000,
-                 hydrodynamics='hansen rp', bead=0) -> pd.core.frame.DataFrame:
+                 hydrodynamics='rp', bead=0) -> pd.core.frame.DataFrame:
     """
     Generate a PSD at "infinite" bandwidth, given by f_sample_inf
     """
 
-    # Tested for Hansen RP + Bead=0 #FIXME
+    # Tested for RP + Bead=0 #FIXME
     gamma_1 = 6 * np.pi * ETA * diam1 / 2
     gamma_2 = 6 * np.pi * ETA * diam2 / 2
     n_pnts = 4096
@@ -341,7 +373,7 @@ def psd_generate(k1, k2, k_d, f_sample_inf, beta_dagger1, beta_dagger2, mean_xi,
         else:
             raise Exception(f'Invalid bead: {bead}')
             
-    elif hydrodynamics == 'hansen rp':  # Hansen, Rotne-Prager
+    elif hydrodynamics == 'rp':  # Rotne-Prager
         a1 = diam1 / 2
         a2 = diam2 / 2
         a = (a1 + a2) / 2
