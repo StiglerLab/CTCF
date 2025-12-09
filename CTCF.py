@@ -40,8 +40,8 @@ class Trace:
 
         
         #--- Measured parameters
-        self.bead_diameter1 = 1000    # Diameter of bead in mobile trap (nm)
-        self.bead_diameter2 = 1000    # Diameter of bead in fixed trap (nm)
+        self.bead_diameter_mob = 1000 # Diameter of bead in mobile trap (nm)
+        self.bead_diameter_fix = 1000 # Diameter of bead in fixed trap (nm)
 
         self.k1_app = np.nan          # Apparent spring constant of mobile trap before correction (pN/nm)
         self.k2_app = np.nan          # Apparent spring constant of fixed trap before correction (pN/nm)
@@ -83,7 +83,7 @@ class Trace:
                                 width1, width2, bead):
         """
         Calculates theoretical sigma as part of the fitting routine.
-        PSD generation and application of filters is multithreaded.
+        Also stores corrected data.
         :param force: Force data (pN)
         :param dist:  Distance data (nm)
         :param k1_app: Apparent (incorrect) k for trap 1 (pN/nm)
@@ -133,7 +133,7 @@ class Trace:
 
         #t1 = time.perf_counter()
         pool = mp.Pool()
-        psd_orig = pool.starmap(psd_filter.psd_generate, [(k1_eff[i], k2_eff[i], df_dx[i], f_generate, beta_dagger_total1[i], beta_dagger_total2[i], ext_corr[i], self.bead_diameter1, self.bead_diameter2, self.hydrodynamics, bead) for i in range(len(calc_sigma))])
+        psd_orig = pool.starmap(psd_filter.psd_generate, [(k1_eff[i], k2_eff[i], df_dx[i], f_generate, beta_dagger_total1[i], beta_dagger_total2[i], ext_corr[i], self.bead_diameter_mob, self.bead_diameter_fix, self.hydrodynamics, bead) for i in range(len(calc_sigma))])
         calc_sigma = pool.starmap(psd_filter.apply_filters, [(psd_orig[i], FILTER_DICT, self.filters) for i in range(len(calc_sigma))])
         pool.close()
         pool.join()
@@ -168,9 +168,9 @@ class Trace:
         print("\nSettings:")
         print("------------------------------------------------")
         print(f"k1_app (pN/nm): {self.k1_app:.3f}, k2_app (pN/nm): {self.k2_app:.3f}")
-        print(f"diam1 (nm):     {self.bead_diameter1:4d},  diam2 (nm):     {self.bead_diameter2:4d}")
+        print(f"diam1 (nm):     {self.bead_diameter_mob:4d},  diam2 (nm):     {self.bead_diameter_fix:4d}")
         print(f"hydrodynamics:  {self.hydrodynamics}")
-        print(f"filters:        {self.filters}")
+        print(f"filters:        {self.filters}\n")
         
  
         if self.force is None or self.dist is None:
@@ -224,9 +224,10 @@ class Trace:
         fit_params.add('width2', value=self.width2, min=20, max=5000)
         for i, y in enumerate(force_data):
             fit_params.add(f'bead_{i}', value=i, vary=0)
-            
+
         result = minimize(self.compute_residuals, fit_params, args=(dist, stdev_data, force_data, self.mask))#,max_nfev=10)
-        
+        print("\nDone with correction. Corrected trace.")
+            
         self.beta_dagger1 = 10**result.params['logbeta_dagger1'].value
         self.beta_dagger2 = 10**result.params['logbeta_dagger2'].value
         self.k_dagger1 = 10**result.params['logk_dagger1'].value
@@ -239,7 +240,6 @@ class Trace:
         self.k_dagger = (self.k_dagger1 / self.k1_app + self.k_dagger2 / self.k2_app) / (1 / self.kc_app)
         self.beta_dagger = (self.beta_dagger1 * self.k2_app * self.k_dagger1 + self.beta_dagger2 *
                             self.k1_app * self.k_dagger2) / (self.k2_app * self.k_dagger1 + self.k1_app * self.k_dagger2)
-        print("\nDone with correction Corrected trace.")
 
         print("\nMiscalibration factors (1=mob, 2=fix):")
         print("------------------------------------------------")
@@ -351,26 +351,6 @@ class Trace:
         return resid.flatten()
 
     
-
-    # FIXME Headers?
-    def load_from_csv(self, path: str,):
-        """
-        Method for loading in data. Format: .csv file with force as $root_F, distance as $root_Dist and Stdev as $root_Stdev
-        :param path: filepath of .csv file
-        """
-        data = pd.read_csv(path, sep=",")
-        self.dist = data.loc[:, 'Distance']
-        self.force = data.loc[:, 'Force']
-        self.stdev = data.loc[:, 'Stdev']
-        try:  # Trap specific values are optional, this skips loading them if they aren't present
-            self.force_mob = data.loc[:, 'Force_1']
-            self.force_fix = data.loc[:, 'Force_2']
-            self.stdev_mob = data.loc[:, 'Stdev_1']
-            self.stdev_fix = data.loc[:, 'Stdev_2']
-        except KeyError:
-            pass
-
-
     # Redefine __repr__ and __str__ methods
     def __repr__(self):
         return f'Trace ({len(self.force)} rows):\n{self.force} '
@@ -432,12 +412,12 @@ def correction(filename: str, k1_app: float, k2_app: float, filters: list, sheet
     except IndexError:
         pass
         
-    ## Parse filters
-    #trace.read_filter_string(filters)
     trace.filters = filters
+
     # Correct
     print("start correction")
     trace.correct()
+
     return trace
 
 

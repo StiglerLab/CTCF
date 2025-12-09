@@ -96,24 +96,6 @@ def filter_bessel8(psd, parameters):
     psd_filtered.iloc[:, 0] *= coefs_mag
     return psd_filtered
 
-#TODO: check #FIXME doesn't work
-def boxcar_BUGGY(psd, parameters):
-    """
-    Boxcar filter: Average by combining n_avg samples into one
-    """
-    n_avg = parameters['n_avg']
-    psd_filtered = psd.copy(deep=True)
-    coefs_mag = psd.copy(deep=True)
-    max_freq = psd.index[-1]  
-    for x, val in coefs_mag.iterrows():
-        try:
-            coefs_mag.iloc[coefs_mag.index.get_loc(x, method='nearest')] = 1 / n_avg * np.abs(
-                np.sin(x / max_freq * np.pi * n_avg / 2) / np.sin(x / max_freq * np.pi / 2))
-        except FloatingPointError:  # To deal with case x = 0
-            pass
-    coefs_mag.iloc[coefs_mag.index.get_loc(coefs_mag.index[0], method='nearest')] = 1
-    psd_filtered = psd * coefs_mag ** 2
-    return psd_filtered
 
 
 def filter_boxcar(psd, parameters):
@@ -249,7 +231,7 @@ def load_resample_coefs(factor: int):
 
 #TODO: This can be optimized for speed
 def psd_generate(k1, k2, k_d, f_sample_inf, beta_dagger1, beta_dagger2, mean_xi, diam1=1000, diam2=1000,
-                 hydrodynamics='rp', bead=0) -> pd.core.frame.DataFrame:
+                 hydrodynamics='rp', bead=0) -> pd.DataFrame:
     """
     Generate a PSD at "infinite" bandwidth, given by f_sample_inf
     """
