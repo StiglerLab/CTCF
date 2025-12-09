@@ -192,7 +192,6 @@ class Trace:
             print("Fitting sum signal only...")
             stdev_data = np.vstack([self.stdev])
             force_data = np.vstack([self.force])
-        dist = np.array(self.dist.copy(deep=True))
            
         same_length = all(len(a) == len(stdev_data[0]) for a in stdev_data) and \
             all(len(a) == len(force_data[0]) for a in force_data) and \
@@ -204,13 +203,13 @@ class Trace:
         if self.mask is None:
             force_data_masked = force_data
             stdev_data_masked = stdev_data
-            dist_masked = dist
+            dist_masked = self.dist
         else:
             if len(self.mask) != len(force_data[0]):
                 raise Exception("Mask not same length")
             force_data_masked = force_data[:,~np.isnan(self.mask)]
             stdev_data_masked = stdev_data[:,~np.isnan(self.mask)]
-            dist_masked = dist[~np.isnan(self.mask)]
+            dist_masked = self.dist[~np.isnan(self.mask)]
         
         # Create parameters
         fit_params = Parameters()
@@ -225,7 +224,7 @@ class Trace:
         for i, y in enumerate(force_data):
             fit_params.add(f'bead_{i}', value=i, vary=0)
 
-        result = minimize(self.compute_residuals, fit_params, args=(dist, stdev_data, force_data, self.mask))#,max_nfev=10)
+        result = minimize(self.compute_residuals, fit_params, args=(self.dist, stdev_data, force_data, self.mask))#,max_nfev=10)
         print("\nDone with correction. Corrected trace.")
             
         self.beta_dagger1 = 10**result.params['logbeta_dagger1'].value
@@ -249,7 +248,7 @@ class Trace:
         print(f"beta_dagger:  {self.beta_dagger:.3f},   k_dagger:     {self.k_dagger:.3f}")
 
         # Re-calculate from final solution
-        self.compute_residuals(result.params, dist, stdev_data, force_data, quiet=True)
+        self.compute_residuals(result.params, self.dist, stdev_data, force_data, quiet=True)
         self.corrected = True
 
         # Show result after correction
@@ -272,6 +271,7 @@ class Trace:
 
 
 
+
     def compute_residuals(self, params, dist, stdev_data, force_data, mask=None, quiet=False):
         """
         Calculate total residual to minimize
@@ -282,7 +282,8 @@ class Trace:
         resid = np.zeros_like(stdev_data)
         # One residual per sum, mob, fix
         for i in range(ndata):
-            calc_sigma = self.calc_theor_sigma_var_kc(force_data[i,:],dist,
+            #force_data[0,:] below is correct. We calculate the theoretical sum, mob and fix only based on the sum signal
+            calc_sigma = self.calc_theor_sigma_var_kc(force_data[0,:], dist,
                                                       params['k1_app'].value, params['k2_app'].value,
                                                       10**params['logbeta_dagger1'].value, 10**params['logbeta_dagger2'].value,
                                                       10**params['logk_dagger1'].value, 10**params['logk_dagger2'].value,
@@ -290,7 +291,9 @@ class Trace:
                                                       params[f'bead_{i}'].value)
             calc_sigma = np.asanyarray(calc_sigma).reshape(-1)
             ratio = stdev_data[i,:] / calc_sigma.ravel()
-            resid[i,:] = stdev_data[i,:] - calc_sigma
+
+            #resid[i,:] = stdev_data[i,:] - calc_sigma
+            resid[i,:] = np.log(stdev_data[i,:] / calc_sigma)
  
             # If masking is on: don't show ratio or calc_sigma for the masked points, and (FURTHER BELOW), remove the residuals
             if mask is not None:
