@@ -85,55 +85,47 @@ def filter_ni447x(psd, parameters):
     
 
 
-#TODO: optimize
 def filter_bessel8(psd, parameters):
     f_cutoff = parameters['f_cutoff']
     f_mod = f_cutoff / 3.17962
-    coefs_mag = psd.copy()
-    div = [coef / f_mod for coef in coefs_mag.index]
-    coefs = []
-    for i in range(len(div)):
-        coefs.append(2027025 / np.sqrt(81 * (-225225 * div[i] + 30030 * div[i] ** 3 - 770 *
-                                             div[i] ** 5 + 4 * div[i] ** 7) ** 2 + (
-                                               2027025 - 945945 * div[i] ** 2 + 51975 * div[i] ** 4 - 630 * div[
-                                           i] ** 6 +
-                                               div[i] ** 8) ** 2))
+    freqs = psd.index.to_numpy()  # shape (n_freq,)
 
-    coefs_mag = [coef ** 2 for coef in coefs]
-    psd_filtered = psd.copy(deep=True)
-    psd_filtered.iloc[:, 0] *= coefs_mag
+    div = freqs/f_mod
+    coefs_mag = 2027025 / np.sqrt(81 * (-225225 * div + 30030 * div** 3 - 770 *
+                                             div**5 + 4 * div** 7)**2 + (
+                                               2027025 - 945945 * div**2 + 51975 * div**4 - 630 * div**6 +
+                                               div**8)**2)
+    psd_filtered = psd.multiply(coefs_mag, axis=0)
     return psd_filtered
 
 
 
 def filter_boxcar(psd, parameters):
     """
-    Boxcar filter: Average by combining n_avg samples into one
+    Boxcar filter: Average by combining n_avg samples into one.
+    Works for single or multiple PSD columns.
     """
     N = parameters['n_avg']      # number of points in the average
     max_freq = psd.index[-1]  
-    fs = 2*max_freq              # sampling frequency (Hz)
-    T = 1 / fs                   # sampling interval
+    fs = 2 * max_freq             # sampling frequency (Hz)
+    T = 1 / fs                    # sampling interval
 
-    freqs = psd.index.values.astype(float).ravel()
-    psd_vals = psd.values.ravel()
-
+    freqs = psd.index.to_numpy().astype(float)  # shape (n_freq,)
     omega = 2 * np.pi * freqs
 
     # Frequency response of an N-point moving average
-    # |H(f)|^2 = (1/N^2) * (sin(NωT/2) / sin(ωT/2))^2
-
     num = np.sin(omega * T * N / 2)
     den = np.sin(omega * T / 2)
 
     # Handle the limit at f = 0 (value should be 1)
-    H2 = np.zeros_like(freqs)
-    small = np.isclose(den, 0)
-    H2[small] = 1.0
-    H2[~small] = (1 / N**2) * (num[~small] / den[~small])**2
+    H2 = np.ones_like(freqs)
+    mask = ~np.isclose(den, 0)
+    H2[mask] = (1 / N**2) * (num[mask] / den[mask])**2
 
-    psd_out = psd_vals * H2
-    return pd.Dataframe(psd_out, index=psd.index)
+    # Apply filter to all columns
+    psd_filtered = psd.multiply(H2, axis=0)
+
+    return psd_filtered
 
 
 def filter_butterworth(psd, parameters):
@@ -197,7 +189,7 @@ def interpolate_psd(psd, n_downsample: int, n_0: int):
     return temp_data
 
 
-# Untested
+# Old code. Broken.
 def filter_psd_resample_down(psd, parameters):
     """
     Filtering as in Igor Pro resample operation
