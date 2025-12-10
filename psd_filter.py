@@ -35,7 +35,7 @@ def check_filters(filter_dict: dict, filter_list: list):
             has_sample_stage = True
             f_sample = filter['frequency']
         if ftype == 'subsample':
-            subsample_factors.append(fparameters['factor'])
+            subsample_factors.append(filter['factor'])
 
     if not has_sample_stage:
         raise Exception("The filter description does not contain a sample stage")
