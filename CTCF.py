@@ -143,10 +143,10 @@ class Trace:
         self.ext_orig = dist - force / self.kc_app
  
         self.force_corr = f_corr.copy()
-        self.force_corr_mob = defl_corr1 * (self.k1_app / self.k_dagger1)
-        self.force_corr_fix = defl_corr2 * (self.k2_app / self.k_dagger2)
-
         self.ext_corr = dist - defl_corr1 - defl_corr2
+        # abs(F_N(x)) = 2*k_0*w/pi * sin(pi*x/(2*w)) [eq. 19]:
+        self.force_corr_mob = 2*(self.k1_app/self.k_dagger1)*self.width1/np.pi * np.sin(np.pi*defl_corr1/(2*self.width1))
+        self.force_corr_fix = 2*(self.k2_app/self.k_dagger2)*self.width2/np.pi * np.sin(np.pi*defl_corr2/(2*self.width2))
 
         if bead==0:
             self.calc_sigma = calc_sigma
