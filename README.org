@@ -1,0 +1,118 @@
+* Correction of Tweezers Calibration Factors (CTCF)
+
+This code provides functions to correct miscalibration of optical tweezers measurements using the force noise signal.
+
+A detailed description of the theory behind this code has been published in [[https://doi.org/10.1063/5.0063690][Freitag et al. J. Chem. Phys. 155, 175101 (2021)]]. Please cite this paper when using the described method.
+
+** Installation
+
+To install this script, clone the project into a folder of your choice and install python. Then install the required dependencies.
+
+#+begin_src python
+pip install pandas numpy matplotlib lmfit openpyxl
+#+end_src
+
+
+** Using this program
+The main class provided by CTCF is ~Trace~. It contains all data required for correction, which is performed using the ~correct()~ method.
+
+It is crucial to provide accurate filtering information. The filters are supplied by a list of dicts (see examples below). Each filter cascade *needs a sample stage*. Implemented filters are:
+
+|----------------------------------------------+---------------+-----------------------|
+| Filter                                       | ~'type'~        | Parameters            |
+|----------------------------------------------+---------------+-----------------------|
+| NI447x data acquisition filter at 78.125 kHz | ~'ni447x'~      | None                  |
+| Quadrant photodiode detector                 | ~'qpd'~         | None                  |
+| Position sensitive device detector           | ~'psd'~         | None                  |
+| N-pole Butterworth filter                    | ~'butterworth'~ | ~'f_cutoff'~, ~'n_poles'~ |
+| 8-pole Bessel filter                         | ~'bessel8'~     | ~'f_cutoff'~            |
+| Sub-sampling by decimation                   | ~'subsample'~   | ~'factor'~              |
+|----------------------------------------------+---------------+-----------------------|
+
+
+*** Use data from within python
+
+After creating a ~Trace~ object, fill the necessary member variables and invoke the ~correct()~ function, as shown below.
+
+#+begin_src python
+from CTCF import Trace
+
+# Create trace object
+tr = Trace()
+
+# Set the apparent trap stiffnesses:
+tr.k_mobile = None #pN/nm
+tr.k_fixed  = None #pN/nm
+
+# Set the filter information
+tr.filters = [{'type':'ni447x'},
+              {'type':'psd'},
+              {'type':'sample','frequency':78125}] #for example
+
+# Set the bead diameters (optional, defaults to 1000 nm for each)
+tr.bead_diameter_mob = 1000 #nm
+tr.bead_diameter_fix = 1000 #nm
+
+# Set the following to arrays of the same length:
+# Apparent data
+tr.force = None #force (pN)
+tr.stdev = None #deflection stdev (nm)
+tr.dist  = None #distance (nm)
+
+# Optional but highly recommended:
+tr.force_mob = None #force of mobile trap (pN)
+tr.force_fix = None #force of fixed trap (pN)
+tr.stdev_mob = None #deflection stdev of mobile trap (nm)
+tr.stdev_fix = None #deflection stdev of fixed trap (nm)
+
+# Optional settings
+tr.plot = False #Set to False to inhibit plotting. Default: True
+tr.mask = None  #Optional. Set to array of 1 (include datapoint) or NaN (exclude datapoint) values
+tr.hydrodynamics = 'rp' # Hydrodynamics model. Options: 'none', 'simple', 'rp' (Rotne-prager, default)
+
+# Run determination of miscalibration parameters and correct data
+tr.correct()
+#+end_src
+
+
+By default the following filters are implemented in the psd_filter.py file.
+
+*** Load data from file
+
+This is a shortcut to manually invoking the procedure. The function ~correction()~ reads data in .csv or .xlsx format and starts the correction from this data.
+
+When individual mobile/fixed data are not available, the expected column layout is as follows: =| Force (pN) | Stdev (nm) | Distance (nm) |=
+
+When they are available (/highly recommended, as the procedure is much more reliable/), the expected column layout is
+=| Force combined (pN) | Stdev combined (nm) | Distance (nm) | Force mob (pN) | Force fix (pN) | Stdev mob (pN) | Stdev fix (pN) |=.
+
+#+begin_src python
+from CTCF import correction
+k_mobile = 0.3 #pN/nm
+k_fixed  = 0.3 #pN/nm
+corrected_trace = correction('filename.csv',
+                             .3, .3,                     #Apparent trap stiffnesses mob, fix in pN/nm
+                             filters=[{'type':'ni447x'}, #Filters
+                                      {'type':'psd'},
+                                      {'type':'sample','frequency':78125}])
+#+end_src
+
+
+*** Masking
+
+For tethers that contain an unfolding protein signature, the signature should be excluded from the fit, as the model does not apply there. This is done by the ~mask~ member variable. If it is ~None~, no masking is applied. If masking is required, set it to an array with the same length as the force data, with ones for included values and NaN for excluded values.
+
+When using the ~correction()~ function which reads from .csv or .xls files, an optional extra column in these files is for providing masking data.
+
+
+** Example
+
+Correction of a DNA tether simulated with an eight-pole Bessel acquisition filter at 75 kHz and acquisition at 150 kHz, without hydrodynamics, with measured trap stiffnesses of 0.3 pN/nm for each trap.
+
+#+begin_src python
+corrected_trace = correction('exampledata.xlsx', .3, .3, filters=[{'type':'bessel8','f_cutoff':75e3},{'type':'sample','frequency':150e3}], hydrodynamics='none')
+#+end_src
+
+[[./example.png]]
+
+
