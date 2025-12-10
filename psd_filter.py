@@ -5,7 +5,7 @@ import time
 
 
 # Set global constants
-OVERSAMPLING_FACTOR = 10
+OVERSAMPLING_FACTOR = 8 #power of two
 KT = 1.38e-2 * 298 # kBT at room temperature in pN*nm
 ETA = 0.89e-9      # Shear viscosity of water in pN s / nm^2
 RHO = 0.99823e-21  # Density of water in pN s^2 nm^-4
@@ -55,10 +55,14 @@ def apply_filters(psd, filter_dict: dict, filter_list: list):
     for filter in filter_list:
         ftype = filter['type']
 
+        #print("FILTER:", ftype, "shape of PSD before:", psd.shape)
+
         if ftype == 'sample':
             psd = filter_dict[ftype](psd, {'factor': total_downsampling_factor*OVERSAMPLING_FACTOR})
         else:
             psd = filter_dict[ftype](psd, filter)
+
+        #print("   shape of PSD after:", psd.shape)
 
     return np.sqrt(np.abs(np.trapz(psd, axis=0, x=psd.index)))
 
@@ -73,8 +77,12 @@ def filter_ni447x(psd, parameters):
                      37341.0, 37566.0, 37813.9, 37979.2, 38153.6, 38259.0, 38332.3, 38382.6,
                      38509.7, 39127.8, 39621.1, 40051.5, 40849.2, 42201.1, 43307.2])
     
-    psd_filtered = psd * 10**(np.interp(psd.index.values, freq, db, left=db[0], right=db[-1])[:, None] / 10)
-    return psd_filtered
+
+    gain = pd.Series(10**(np.interp(psd.index.values, freq, db) / 10), index=psd.index)  
+    psd_filtered = psd.mul(gain, axis=0)
+    
+    return psd_filtered 
+    
 
 
 #TODO: optimize
@@ -131,9 +139,9 @@ def filter_boxcar(psd, parameters):
 def filter_butterworth(psd, parameters):
     f_cutoff = parameters['f_cutoff']
     n_poles = parameters['n_poles']
-    coefs_mag = [1 / np.sqrt(1 + (coef / f_cutoff) ** (2*n_poles)) for coef in psd.index]
-    psd_filtered = psd.copy(deep=True)
-    psd_filtered.iloc[:, 0] *= coefs_mag
+    freqs = psd.index.to_numpy()  # shape (n_freq,)
+    coefs_mag = 1 / np.sqrt(1 + (freqs / f_cutoff) ** (2*n_poles))
+    psd_filtered = psd.multiply(coefs_mag, axis=0)
     return psd_filtered
 
 
@@ -143,23 +151,22 @@ def filter_qpd(psd, parameters):
     """
     gam = 0.44
     f_0 = 11.1e3
-    freqs = psd.index.to_numpy()  # vectorized access
-    coefs_mag = gam**2 + (1 - gam**2) / (1 + (freqs / f_0)**2)
-    psd_filtered = psd.copy(deep=True)
-    psd_filtered.iloc[:, 0] = psd_filtered.iloc[:, 0].to_numpy() * coefs_mag
+    freqs = psd.index.to_numpy()  # shape (n_freq,)
+    coefs_mag = gam**2 + (1 - gam**2) / (1 + (freqs / f_0)**2)  # shape (n_freq,)
+    psd_filtered = psd.multiply(coefs_mag, axis=0)
     return psd_filtered
 
 
-def filter_psd(psd, parameters):
+def filter_psd(psd, parameters=None):
     """
     Filtering of a position-sensitive device like the DL100-7
     """
     gam = 0.6
     f_0 = 26.695e3
-    freqs = psd.index.to_numpy()  # vectorized access
-    coefs_mag = gam**2 + (1 - gam**2) / (1 + (freqs / f_0)**2)
-    psd_filtered = psd.copy(deep=True)
-    psd_filtered.iloc[:, 0] = psd_filtered.iloc[:, 0].to_numpy() * coefs_mag
+    freqs = psd.index.to_numpy()  # shape (n_freq,)
+    coefs_mag = gam**2 + (1 - gam**2) / (1 + (freqs / f_0)**2)  # shape (n_freq,)
+    psd_filtered = psd.multiply(coefs_mag, axis=0)
+    
     return psd_filtered
 
 
@@ -229,19 +236,65 @@ def load_resample_coefs(factor: int):
     return rs_coef
 
 
-#TODO: This can be optimized for speed
+
+def psd_subsample(psd, parameters):
+    downsamplingfactor = parameters['factor']
+
+    if isinstance(psd, pd.Series):
+        psd = psd.to_frame()
+
+    # Extract array (F x N)
+    psd_arr = psd.to_numpy()
+    n_orig = psd_arr.shape[0]
+    n_cols = psd_arr.shape[1]
+
+    n_per_block = n_orig // downsamplingfactor
+    x = np.arange(n_per_block)
+
+    # Even-block folding
+    even_i = np.arange(0, downsamplingfactor, 2)
+    even_blocks = psd_arr[even_i[:, None]*n_per_block + x[None, :], :]
+    signal_even = even_blocks.sum(axis=0)   # sum across even-block rows
+
+    # Odd-block folding (reverse order inside block)
+    odd_i = np.arange(1, downsamplingfactor, 2)
+    odd_blocks = psd_arr[(odd_i[:, None]+1)*n_per_block - 1 - x[None, :], :]
+    signal_odd = odd_blocks.sum(axis=0)
+
+    signal = signal_even + signal_odd    # shape = (n_per_block, n_cols)
+
+    freqs_new = np.linspace(psd.index[0],
+                            psd.index[-1] / downsamplingfactor,
+                            n_per_block)
+
+    psd_ss = pd.DataFrame(signal, index=freqs_new, columns=psd.columns)
+
+    return psd_ss
+
+
+
 def psd_generate(k1, k2, k_d, f_sample_inf, beta_dagger1, beta_dagger2, mean_xi, diam1=1000, diam2=1000,
                  hydrodynamics='rp', bead=0) -> pd.DataFrame:
     """
     Generate a PSD at "infinite" bandwidth, given by f_sample_inf
+    Result: (n, F), where n is the distance data point and f is the frequency data point
     """
 
-    # Tested for RP + Bead=0 #FIXME
+    # Convert shape to (n, 1)
+    k1 = np.atleast_1d(k1)[:, None]
+    k2 = np.atleast_1d(k2)[:, None]
+    k_d = np.atleast_1d(k_d)[:, None]
+    beta_dagger1 = np.atleast_1d(beta_dagger1)[:, None]
+    beta_dagger2 = np.atleast_1d(beta_dagger2)[:, None]
+    mean_xi = np.atleast_1d(mean_xi)[:, None]
+
+    # Frequency: convert shape to (1, f)
+    n_points = 4096
+    freq = np.linspace(0, f_sample_inf/2, n_points)[None, :]
+
+    pi2 = np.pi**2
     gamma_1 = 6 * np.pi * ETA * diam1 / 2
     gamma_2 = 6 * np.pi * ETA * diam2 / 2
-    n_pnts = 4096
-    max_freq = f_sample_inf / 2
-    freq = np.linspace(0, max_freq, num=n_pnts)
 
     if hydrodynamics == 'none':
         if bead == 0:
@@ -413,37 +466,6 @@ def psd_generate(k1, k2, k_d, f_sample_inf, beta_dagger1, beta_dagger2, mean_xi,
         else:
             raise Exception(f'Invalid bead: {bead}')
 
-
-    return pd.DataFrame(data=theor_psd_calc, index=freq)
-
-
-
-
-def psd_subsample(psd, parameters):
-    downsamplingfactor = parameters['factor']
-
-    psd_arr = psd.iloc[:, 0].to_numpy()
-    n_orig = len(psd_arr)
-    n_per_block = n_orig // downsamplingfactor
-    x = np.arange(n_per_block)
-
-    # Even blocks (i=0,2,4...)
-    even_i = np.arange(0, downsamplingfactor, 2)
-    even_blocks = psd_arr[even_i[:, None]*n_per_block + x[None, :]]
-    signal_even = even_blocks.sum(axis=0)
-
-    # Odd blocks (i=1,3,5...)
-    odd_i = np.arange(1, downsamplingfactor, 2)
-    odd_blocks = psd_arr[(odd_i[:, None]+1)*n_per_block - 1 - x[None, :]]
-    signal_odd = odd_blocks.sum(axis=0)
-
-    # Combine signals
-    signal = signal_even + signal_odd
-
-    # Correct frequency axis
-    freqs_new = np.linspace(psd.index[0], psd.index[-1] / downsamplingfactor, n_per_block)
-
-    psd_ss = pd.DataFrame({psd.columns[0]: signal}, index=freqs_new)
-   
-    return psd_ss
-
+ 
+        
+    return pd.DataFrame(theor_psd_calc.T, index=freq.ravel())

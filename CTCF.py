@@ -4,7 +4,6 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from lmfit import Model, Parameters, minimize
-import multiprocessing as mp
 import time
 
 
@@ -131,15 +130,10 @@ class Trace:
         beta_dagger_total1 = beta_dagger1 * np.sqrt(1 - (kappa1**2))
         beta_dagger_total2 = beta_dagger2 * np.sqrt(1 - (kappa2**2))
 
-        #t1 = time.perf_counter()
-        pool = mp.Pool()
-        psd_orig = pool.starmap(psd_filter.psd_generate, [(k1_eff[i], k2_eff[i], df_dx[i], f_generate, beta_dagger_total1[i], beta_dagger_total2[i], ext_corr[i], self.bead_diameter_mob, self.bead_diameter_fix, self.hydrodynamics, bead) for i in range(len(calc_sigma))])
-        calc_sigma = pool.starmap(psd_filter.apply_filters, [(psd_orig[i], FILTER_DICT, self.filters) for i in range(len(calc_sigma))])
-        pool.close()
-        pool.join()
-        #calc_sigma = [psd_filter.apply_filters(psd_orig[i], FILTER_DICT, self.filters)for i in range(len(calc_sigma))]
-        #print("PERF", time.perf_counter()-t1)
-
+        psd_orig = psd_filter.psd_generate(k1_eff, k2_eff, df_dx, f_generate, beta_dagger_total1, beta_dagger_total2,
+                                                   ext_corr, self.bead_diameter_mob, self.bead_diameter_fix, self.hydrodynamics, bead)
+        calc_sigma = psd_filter.apply_filters(psd_orig, FILTER_DICT, self.filters)
+        
         self.ext_orig = dist - force / self.kc_app
  
         self.force_corr = f_corr.copy()
