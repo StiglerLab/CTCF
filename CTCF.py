@@ -84,7 +84,7 @@ class Trace:
         """
         Calculates theoretical sigma as part of the fitting routine.
         Also stores corrected data.
-        :param force: Force data (pN)
+        :param force: Force data calculated from the combination of both traps (pN)
         :param dist:  Distance data (nm)
         :param k1_app: Apparent (incorrect) k for trap 1 (pN/nm)
         :param k2_app: Apparent (incorrect) k for trap 2 (pN/nm)
@@ -292,8 +292,8 @@ class Trace:
             calc_sigma = np.asanyarray(calc_sigma).reshape(-1)
             ratio = stdev_data[i,:] / calc_sigma.ravel()
 
-            #resid[i,:] = stdev_data[i,:] - calc_sigma
-            resid[i,:] = np.log(stdev_data[i,:] / calc_sigma)
+            resid[i,:] = stdev_data[i,:] - calc_sigma
+            #resid[i,:] = np.log(stdev_data[i,:] / calc_sigma)
  
             # If masking is on: don't show ratio or calc_sigma for the masked points, and (FURTHER BELOW), remove the residuals
             if mask is not None:
@@ -369,7 +369,7 @@ class Trace:
         return ret_string
 
 
-def correction(filename: str, k1_app: float, k2_app: float, filters: list, sheet: str = ""):
+def correction(filename: str, k1_app: float, k2_app: float, filters: list, sheet: str = "", hydrodynamics = 'rp'):
     """
     Loads data, parses filter and runs correction
     :param filename:  File that contains data to be corrected; allowed extensions: *.csv, *.xlsx
@@ -377,6 +377,7 @@ def correction(filename: str, k1_app: float, k2_app: float, filters: list, sheet
     :param k2_app; Apparent stiffness of trap 2
     :param sheet: Optional sheetname argument in case multi-sheet .xlsx file is used
     :param filters: String of filters and related parameters
+    :param hydrodynamics: Hydrodynamics model
     :return: Corrected trace object
     """
     #  Load data and store in Trace object
@@ -416,6 +417,7 @@ def correction(filename: str, k1_app: float, k2_app: float, filters: list, sheet
         pass
         
     trace.filters = filters
+    trace.hydrodynamics = hydrodynamics
 
     # Correct
     print("start correction")
