@@ -363,7 +363,7 @@ class Trace:
         return ret_string
 
 
-def correction(filename: str, k1_app: float, k2_app: float, filters: list, sheet: str = "", hydrodynamics = 'rp'):
+def correction(filename: str, k1_app: float, k2_app: float, filters: list, sheet: str="", hydrodynamics='rp', diameter_1=1000, diameter_2=1000):
     """
     Loads data, parses filter and runs correction
     :param filename:  File that contains data to be corrected; allowed extensions: *.csv, *.xlsx
@@ -372,6 +372,8 @@ def correction(filename: str, k1_app: float, k2_app: float, filters: list, sheet
     :param sheet: Optional sheetname argument in case multi-sheet .xlsx file is used
     :param filters: String of filters and related parameters
     :param hydrodynamics: Hydrodynamics model
+    :param diameter_1: Diameter of bead in trap 1 in nm
+    "param diameter_2: Diameter of bead in trap 2 in nm
     :return: Corrected trace object
     """
     #  Load data and store in Trace object
@@ -412,6 +414,8 @@ def correction(filename: str, k1_app: float, k2_app: float, filters: list, sheet
         
     trace.filters = filters
     trace.hydrodynamics = hydrodynamics
+    trace.diameter_1 = diameter_1
+    trace.diameter_2 = diameter_2
 
     # Correct
     print("start correction")
